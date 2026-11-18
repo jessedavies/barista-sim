@@ -1,0 +1,1209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hand Toy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --paper:#f6f1e7; --ink:#231c16; --muted:#7b6f62; --ok:#3f7d4e; }
+  html,body { margin:0; height:100%; background:#1c1511; overflow:hidden; font-family:'IBM Plex Mono', ui-monospace, monospace; }
+  canvas { display:block; cursor:crosshair; }
+  #docket { position:fixed; top:18px; left:18px; width:236px; background:var(--paper); color:var(--ink);
+    padding:14px 16px 12px; border-radius:2px; transform:rotate(-1.2deg); box-shadow:0 10px 30px rgba(0,0,0,.45);
+    font-size:12px; line-height:1.55; }
+  #docket::before { content:''; position:absolute; top:-6px; left:50%; width:8px; height:8px; margin-left:-4px; border-radius:50%; background:#8c8c8c; box-shadow:0 1px 2px rgba(0,0,0,.5); }
+  #docket h1 { font-family:'Fraunces', Georgia, serif; font-weight:600; font-size:20px; margin:0 0 2px; letter-spacing:-.01em; }
+  #docket .who { color:var(--muted); margin-bottom:8px; border-bottom:1px dashed #cfc5b6; padding-bottom:8px; }
+  #docket .step.done { color:var(--ok); text-decoration:line-through; }
+  #docket .step.warn { color:#b5562e; }
+  #docket .clock { font-size:22px; font-weight:500; margin-top:8px; }
+  #docket .runs { margin-top:8px; border-top:1px dashed #cfc5b6; padding-top:6px; color:var(--muted); font-size:11px; }
+  #docket .runs b { color:var(--ink); font-weight:500; }
+  #toast { position:fixed; left:50%; top:20%; transform:translate(-50%,0); font-family:'Fraunces', Georgia, serif; font-size:28px;
+    color:#fbf3e6; text-shadow:0 2px 18px rgba(0,0,0,.8); pointer-events:none; opacity:0; transition:opacity .25s; text-align:center; white-space:nowrap; }
+  #toast small { display:block; font-family:'IBM Plex Mono', monospace; font-size:13px; opacity:.85; margin-top:4px; }
+  #fingers { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); display:flex; gap:8px; align-items:flex-end; }
+  #fingers .f { width:38px; height:44px; border-radius:19px 19px 8px 8px; border:1.5px solid rgba(246,241,231,.4);
+    color:rgba(246,241,231,.8); font-size:12px; display:flex; align-items:flex-end; justify-content:center; padding-bottom:6px; box-sizing:border-box; background:rgba(20,14,10,.35); }
+  #fingers .f.thumb { width:64px; height:30px; border-radius:15px; margin-right:6px; align-items:center; padding:0; }
+  #fingers .f.curl { background:rgba(246,241,231,.3); color:#fff; }
+  #fingers .f.on { background:#3f7d4e; border-color:#7fc08f; color:#fff; }
+  #grip { position:fixed; bottom:72px; left:50%; transform:translateX(-50%); color:#f6f1e7; font-size:12px; letter-spacing:.08em; text-transform:uppercase; text-shadow:0 1px 6px #000; }
+  #help { position:fixed; left:18px; bottom:18px; color:rgba(246,241,231,.75); font-size:11px; line-height:1.7; text-shadow:0 1px 4px #000; }
+  #help kbd { font-family:inherit; border:1px solid rgba(246,241,231,.4); border-radius:3px; padding:0 4px; color:#fff; }
+  #credits { position:fixed; right:12px; bottom:8px; color:rgba(246,241,231,.45); font-size:10px; }
+  #credits a { color:inherit; }
+  #loading { position:fixed; inset:0; display:grid; place-items:center; color:#f6f1e7; font-family:'Fraunces',serif; font-size:22px; z-index:5; background:#1c1511; }
+  @media (max-width: 760px) { #help, #credits { display:none; } #docket { transform:none; width:200px; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="loading">Warming the machine…</div>
+<div id="docket"></div>
+<div id="toast"></div>
+<div id="grip"></div>
+<div id="fingers"></div>
+<div id="help"></div>
+<div id="credits">Models CC-BY: Lanzaman, JoeDev, DavidFischer, clon6767, Subdivision Productions, symbol aughhhh · <a href="../CREDITS.md">credits</a></div>
+<script type="module">
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import GUI from 'three/addons/libs/lil-gui.module.min.js';
+import RAPIER from 'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/+esm';
+
+const V3 = THREE.Vector3, QT = THREE.Quaternion;
+const ASSETS = {
+  hdri: 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/comfy_cafe_2k.hdr',
+  oak: n => `https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/white_oak_veneer/white_oak_veneer_${n}_1k.jpg`,
+  sf: n => `../assets/sketchfab/${n}/scene.gltf`,   // CC-BY models, see CREDITS.md
+};
+
+// ─────────────────────────────────────────────────────────────
+// Feel parameters: the clumsiness dial.
+// ─────────────────────────────────────────────────────────────
+const DEFAULTS = {
+  mode: 'easy',      // 'easy' = mouse only; 'fingers' = Surgeon-style key per finger; 'grip' = space closes all
+  spring: 120, damping: 14, maxSpeed: 2.5,
+  wristFollow: 12, rollSpeed: 2.2,
+  hover: 0.36, lowerOffset: 0.09, carryLift: 0.012,
+  curlSpeed: 9, grabRadius: 0.035,
+  spillRate: 1.0, slosh: 1.0, trayTolerance: 0.035,
+  bgBlur: 0.12, bgIntensity: 0.75, bgTurn: 1.57,
+};
+const P = { ...DEFAULTS };
+try { const saved = JSON.parse(localStorage.getItem('handtoy.params.v4') || '{}'); for (const k in DEFAULTS) if (k in saved) P[k] = saved[k]; } catch {}
+const save = () => { try { localStorage.setItem('handtoy.params.v4', JSON.stringify(P)); } catch {} };
+
+// ─── layout (metres). The machine model is placed by measured geometry (tools/measure.html). ───
+const BENCH = 0.9;
+const M_OFF = new V3(0, BENCH + 0.034, -0.605);          // machine model origin in the world
+const mY = y => M_OFF.y + y, mZ = z => M_OFF.z + z;
+const TRAY_TOP = mY(0.133);                               // drip tray spans the whole front
+const GROUP_BOTTOM = mY(0.339);
+const MACHINE_FRONT = mZ(0.29), RECESS_BACK = mZ(0.084);
+const GH = new V3(-0.15, 0, mZ(0.205));                   // left group head axis: the one we brew on
+const PF_LOCK = new V3(GH.x, GROUP_BOTTOM - 0.0175, GH.z);
+const PASS = new V3(-0.32, 0, 0.04);
+const PASS_TOP = BENCH + 0.012;
+const SPAWN = new V3(0.1, 0, -0.01);
+// espresso chain stations (left of the machine)
+const GRINDER = new V3(-0.6, BENCH, -0.52);
+const FORK_POSE = new V3(GRINDER.x, BENCH + 0.2, GRINDER.z + 0.16);   // basket centre when docked under the chute
+const CHUTE_Y = BENCH + 0.225;
+const KNOCK = new V3(-0.62, BENCH, -0.2), KNOCK_R = 0.065, KNOCK_H = 0.1;
+const TAMPER_HOME = new V3(-0.48, BENCH, -0.04);
+const DOSE_G = 18.5;   // grams at dose = 1
+// milk chain (right of the machine)
+const JUG_HOME = new V3(0.29, BENCH, -0.17), BOTTLE_HOME = new V3(0.42, BENCH, -0.12);   // kept inside the view on narrow screens
+const JUG_R = 0.041, JUG_H = 0.107, JUG_ML = 520;
+const BOTTLE_H = 0.26, BOTTLE_R = 0.055, BOTTLE_ML = 2000;
+const WAND_TOP = new V3(0.37, mY(0.335), mZ(0.13)), WAND_TIP = new V3(0.37, mY(0.215), mZ(0.33));
+const SHOT_ML = 36, CUP_ML = 160;
+const CUP_K = 1.35;                                       // cup-and-saucer model scale
+const CUP_H = 0.044 * CUP_K, CUP_R = 0.035 * CUP_K, SAUCER_R = 0.045 * CUP_K, SAUCER_H = 0.010 * CUP_K;
+const STEP = 1 / 60;
+const GRAB_Z = -0.035;   // things are held under the fingers, ahead of the palm centre; the cursor aims this point
+const UP = new V3(0, 1, 0);
+
+// ─── renderer, scene, camera ───
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(52, 1, 0.01, 40);
+const CAM_POS = new V3(0.02, 1.52, 0.5), CAM_LOOK = new V3(-0.06, 1.04, -0.38);
+camera.position.copy(CAM_POS); camera.lookAt(CAM_LOOK);
+// the barista's shoulder steps along the bench with the hand; the camera stays put so the cursor and hand never drift apart
+let bodyX = 0;
+function fit() {
+  camera.aspect = innerWidth / innerHeight;
+  const minH = THREE.MathUtils.degToRad(80);   // wide enough that grinder (left) and milk (right) both stay in view
+  camera.fov = Math.max(50, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(minH / 2) / camera.aspect)));
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+}
+addEventListener('resize', fit); fit();
+const key = new THREE.DirectionalLight(0xffe6c8, 1.6);
+key.position.set(-1.0, 3.0, 1.1);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -1.1, right: 1.1, top: 1.1, bottom: -1.1, near: 0.5, far: 6 });
+key.shadow.bias = -0.0004; key.shadow.normalBias = 0.012;
+scene.add(key);
+
+// ─── load everything ───
+const texLoader = new THREE.TextureLoader(), gltf = new GLTFLoader();
+const loadTex = (url, srgb) => texLoader.loadAsync(url).then(t => { if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t; });
+const [hdri, oakDiff, oakNor, oakRough, , gMachine, gCup, gArms, gPitcher, gTamper, gPaper] = await Promise.all([
+  new RGBELoader().loadAsync(ASSETS.hdri),
+  loadTex(ASSETS.oak('diff'), true), loadTex(ASSETS.oak('nor_gl')), loadTex(ASSETS.oak('rough')),
+  RAPIER.init(),
+  gltf.loadAsync(ASSETS.sf('canarian_cafe_-_coffee_machine')),
+  gltf.loadAsync(ASSETS.sf('cup_of_coffee')),
+  gltf.loadAsync(ASSETS.sf('first_person_hands_rigged')),
+  gltf.loadAsync(ASSETS.sf('umamusume_milk_frothing_pitcher')),
+  gltf.loadAsync(ASSETS.sf('coffee_tamper')),
+  gltf.loadAsync(ASSETS.sf('paper_coffee_cup_3d_pack')),
+]);
+hdri.mapping = THREE.EquirectangularReflectionMapping;
+scene.background = hdri; scene.environment = hdri;
+function applyBg() {
+  scene.backgroundBlurriness = P.bgBlur; scene.backgroundIntensity = P.bgIntensity;
+  scene.backgroundRotation.set(0, P.bgTurn, 0); scene.environmentRotation.set(0, P.bgTurn, 0);
+  scene.environmentIntensity = 0.9;
+}
+applyBg();
+document.getElementById('loading').remove();
+
+// ─── materials ───
+function terrazzoTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 1024;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ebe6dd'; g.fillRect(0, 0, 1024, 1024);
+  let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const cols = ['#c7b6a2', '#8d918a', '#d48d68', '#3f3e3a', '#b9b2a6', '#e3a07f', '#6f7b72'];
+  for (let i = 0; i < 2600; i++) {
+    g.fillStyle = cols[Math.floor(rnd() * cols.length)];
+    const x = rnd() * 1024, y = rnd() * 1024, r = 1.2 + rnd() * (rnd() < 0.07 ? 11 : 4);
+    g.beginPath();
+    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + rnd(); g.lineTo(x + Math.cos(a) * r * (0.6 + rnd() * 0.6), y + Math.sin(a) * r * (0.6 + rnd() * 0.6)); }
+    g.fill();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1.6, 1.1); t.anisotropy = 8;
+  return t;
+}
+const oak = (rx, ry) => {
+  const m = new THREE.MeshStandardMaterial({ map: oakDiff.clone(), normalMap: oakNor.clone(), roughnessMap: oakRough.clone(), roughness: 1 });
+  [m.map, m.normalMap, m.roughnessMap].forEach(t => { t.repeat.set(rx, ry); t.needsUpdate = true; });
+  return m;
+};
+const M = {
+  terrazzo: new THREE.MeshPhysicalMaterial({ map: terrazzoTexture(), roughness: 0.3, clearcoat: 0.5, clearcoatRoughness: 0.25 }),
+  oakFront: oak(3, 1.5), oakBoard: oak(0.5, 0.4),
+  brushed: new THREE.MeshStandardMaterial({ color: 0xbfc3c7, metalness: 1, roughness: 0.32 }),
+  chrome: new THREE.MeshStandardMaterial({ color: 0xf2f3f4, metalness: 1, roughness: 0.06 }),
+  darkSteel: new THREE.MeshStandardMaterial({ color: 0x3d4044, metalness: 1, roughness: 0.35 }),
+  matte: new THREE.MeshStandardMaterial({ color: 0x18181a, roughness: 0.5 }),
+  ceramic: new THREE.MeshPhysicalMaterial({ color: 0xf6f3ee, roughness: 0.2, clearcoat: 0.8, clearcoatRoughness: 0.12, side: THREE.DoubleSide }),
+  skin: new THREE.MeshPhysicalMaterial({ color: 0xd7a084, roughness: 0.5, sheen: 0.5, sheenColor: new THREE.Color(0xff9f88), sheenRoughness: 0.5, clearcoat: 0.04 }),
+  coffee: new THREE.MeshStandardMaterial({ color: 0x2e170b, roughness: 0.12 }),
+  crema: new THREE.MeshStandardMaterial({ color: 0xa8652f, roughness: 0.3 }),
+  glass: new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.05, transmission: 0.9, thickness: 0.01, transparent: true, opacity: 0.6 }),
+  beans: new THREE.MeshStandardMaterial({ color: 0x3b2314, roughness: 0.7 }),
+  paper: new THREE.MeshStandardMaterial({ color: 0xefe9df, roughness: 0.7 }),
+};
+
+// ─── physics world + helpers ───
+const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+world.timestep = STEP;
+world.integrationParameters.numSolverIterations = 8;
+const shadows = o => { o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); return o; };
+function add(mesh, x, y, z, parent = scene) { mesh.position.set(x, y, z); parent.add(shadows(mesh)); return mesh; }
+function staticBox(hx, hy, hz, x, y, z) { world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z).setFriction(0.9)); }
+function staticBoxSpan(x0, x1, y0, y1, z0, z1) { staticBox((x1 - x0) / 2, (y1 - y0) / 2, (z1 - z0) / 2, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); }
+function staticCyl(r, h, x, y, z) { world.createCollider(RAPIER.ColliderDesc.cylinder(h / 2, r).setTranslation(x, y, z).setFriction(0.8)); }
+function rodMesh(a, b, r, mat, seg = 16) {
+  const d = b.clone().sub(a), len = d.length();
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg), mat);
+  m.position.copy(a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(UP, d.normalize());
+  return shadows(m);
+}
+function lathe(pts, mat, seg = 48) { return shadows(new THREE.Mesh(new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), seg), mat)); }
+// drop every triangle whose centre falls inside one of the boxes (model space): cuts baked-in parts out of a single-mesh model
+function cullTriangles(root, boxes) {
+  root.updateMatrixWorld(true);
+  const a = new V3(), b = new V3(), c = new V3();
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const g = o.geometry, pos = g.attributes.position;
+    if (!g.index) g.setIndex([...Array(pos.count).keys()]);
+    const idx = g.index.array, keep = [];
+    for (let i = 0; i < idx.length; i += 3) {
+      a.fromBufferAttribute(pos, idx[i]).applyMatrix4(o.matrixWorld);
+      b.fromBufferAttribute(pos, idx[i + 1]).applyMatrix4(o.matrixWorld);
+      c.fromBufferAttribute(pos, idx[i + 2]).applyMatrix4(o.matrixWorld);
+      const m = a.add(b).add(c).divideScalar(3);
+      if (!boxes.some(bx => bx.containsPoint(m))) keep.push(idx[i], idx[i + 1], idx[i + 2]);
+    }
+    g.setIndex(keep);
+  });
+}
+function solidify(root) {
+  root.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { m.transparent = false; m.alphaTest = 0.5; m.depthWrite = true; }); } });
+  return root;
+}
+
+// ─── bench ───
+add(new THREE.Mesh(new RoundedBoxGeometry(1.7, 0.04, 1.14, 2, 0.008), M.terrazzo), 0, BENCH - 0.02, -0.42);
+staticBox(0.85, 0.02, 0.57, 0, BENCH - 0.02, -0.42);
+add(new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.86, 0.025), M.oakFront), 0, BENCH - 0.47, 0.14);
+world.createCollider(RAPIER.ColliderDesc.cuboid(5, 0.05, 5).setTranslation(0, -0.05, 0));
+add(new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.3, 0.02), M.oakFront), 0, BENCH + 0.15, -1.0);
+
+// ─── espresso machine (model): baked portafilters cut out, colliders from measurements ───
+{
+  const m = gMachine.scene;
+  cullTriangles(m, [
+    new THREE.Box3(new V3(-0.215, 0.235, 0.12), new V3(-0.085, 0.334, 0.44)),   // portafilter locked in the left group
+    new THREE.Box3(new V3(0.06, 0.134, 0.11), new V3(0.38, 0.22, 0.33)),        // portafilter lying on the tray
+    new THREE.Box3(new V3(0.30, 0.135, 0.10), new V3(0.43, 0.343, 0.27)),       // right steam wand: replaced by ours
+  ]);
+  solidify(m); m.position.copy(M_OFF); scene.add(m);
+  staticBoxSpan(-0.47, 0.47, BENCH, TRAY_TOP, mZ(-0.288), MACHINE_FRONT);            // base + drip tray
+  staticBoxSpan(-0.47, 0.47, mY(0.344), mY(0.558), mZ(-0.288), MACHINE_FRONT);       // upper body
+  staticBoxSpan(-0.47, 0.47, TRAY_TOP, mY(0.344), mZ(-0.288), RECESS_BACK);          // back of the brew recess
+  for (const sx of [-1, 1]) staticCyl(0.045, 0.012, sx * 0.15, GROUP_BOTTOM + 0.006, GH.z);
+}
+// cups warming on top
+const LATHE_CUP = [[0, 0], [0.027, 0], [0.030, 0.004], [0.033, 0.02], [0.037, 0.045], [0.040, 0.068], [0.0415, 0.08], [0.0385, 0.08], [0.0385, 0.078], [0.036, 0.05], [0.031, 0.02], [0.028, 0.008], [0, 0.008]];
+for (let i = 0; i < 6; i++) { const c = lathe(LATHE_CUP, M.ceramic); c.rotation.x = Math.PI; c.position.set(-0.3 + i * 0.12, mY(0.528) + 0.08, mZ(0.12 - (i % 2) * 0.13)); scene.add(c); }
+
+// grinder (procedural), knock box, tamper, pitcher, takeaway cups
+const grinder = new THREE.Group(); grinder.position.copy(GRINDER); scene.add(grinder);
+add(new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.42, 0.22, 3, 0.02), M.matte), 0, 0.21, 0, grinder);
+add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.035, 0.03, 24), M.brushed), 0, 0.435, 0, grinder);
+add(lathe([[0.035, 0], [0.07, 0.16], [0.075, 0.17], [0.0, 0.17]], M.glass), 0, 0.45, 0, grinder);
+add(lathe([[0, 0], [0.034, 0], [0.065, 0.12], [0, 0.12]], M.beans), 0, 0.453, 0, grinder);
+add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.07), M.brushed), 0, CHUTE_Y - BENCH + 0.0175, 0.135, grinder);   // chute
+for (const sx of [-1, 1]) grinder.add(rodMesh(new V3(sx * 0.03, 0.18, 0.11), new V3(sx * 0.03, 0.18, 0.2), 0.004, M.brushed));   // fork
+add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.04, 0.04), M.brushed), 0, 0.15, 0.13, grinder).visible = false;
+staticBox(0.08, 0.21, 0.11, GRINDER.x, BENCH + 0.21, GRINDER.z);
+const grindStream = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.01, 1, 10), new THREE.MeshStandardMaterial({ color: 0x4a2c1a, roughness: 1 }));
+grindStream.visible = false; scene.add(grindStream);
+// knock box: open-topped, so a portafilter can be banged down into it
+add(lathe([[0, 0], [KNOCK_R, 0], [KNOCK_R, KNOCK_H], [KNOCK_R - 0.007, KNOCK_H], [KNOCK_R - 0.007, 0.012], [0, 0.012]], M.matte), KNOCK.x, BENCH, KNOCK.z);
+scene.add(rodMesh(new V3(KNOCK.x - KNOCK_R, BENCH + 0.085, KNOCK.z), new V3(KNOCK.x + KNOCK_R, BENCH + 0.085, KNOCK.z), 0.008, M.matte));
+for (const [dx, dz, hx, hz] of [[KNOCK_R, 0, 0.004, KNOCK_R], [-KNOCK_R, 0, 0.004, KNOCK_R], [0, KNOCK_R, KNOCK_R, 0.004], [0, -KNOCK_R, KNOCK_R, 0.004]])
+  staticBox(hx, KNOCK_H / 2, hz, KNOCK.x + dx, BENCH + KNOCK_H / 2, KNOCK.z + dz);
+// tamper: grabbable; origin at the base
+const tamperBody = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(TAMPER_HOME.x, BENCH + 0.0005, TAMPER_HOME.z).setCcdEnabled(true).setAngularDamping(0.6));
+world.createCollider(RAPIER.ColliderDesc.cylinder(0.012, 0.031).setTranslation(0, 0.012, 0).setMass(0.3).setFriction(0.8), tamperBody);
+world.createCollider(RAPIER.ColliderDesc.cylinder(0.045, 0.02).setTranslation(0, 0.06, 0).setMass(0.1).setFriction(0.8), tamperBody);
+const tamper = solidify(gTamper.scene); tamper.scale.setScalar(0.01); scene.add(tamper);
+{
+  const paper = gPaper.scene;
+  paper.traverse(o => { if (o.isMesh) {
+    const n = +(o.name.match(/Circle0(\d\d)/) || [])[1];
+    if (!(n >= 12 && n <= 17)) { o.visible = false; return; }
+    o.material = n % 2 === 0 ? M.paper : M.matte; o.castShadow = o.receiveShadow = true;
+  } });
+  paper.scale.setScalar(0.05); paper.rotation.y = Math.PI / 2; paper.position.set(0.605, BENCH, -0.62); scene.add(paper);
+}
+add(new THREE.Mesh(new RoundedBoxGeometry(0.22, 0.012, 0.17, 2, 0.003), M.oakBoard), PASS.x, BENCH + 0.006, PASS.z);
+staticBox(0.11, 0.006, 0.085, PASS.x, BENCH + 0.006, PASS.z);
+
+// ─── milk: steam wand, jug, 2L bottle ───
+scene.add(rodMesh(WAND_TOP, WAND_TIP, 0.0055, M.chrome));
+add(new THREE.Mesh(new THREE.SphereGeometry(0.007, 16, 10), M.chrome), WAND_TIP.x, WAND_TIP.y, WAND_TIP.z);
+add(new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.03, 20), M.matte), WAND_TOP.x, WAND_TOP.y + 0.02, WAND_TOP.z + 0.02).rotation.x = Math.PI / 2;
+const jugBody = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(JUG_HOME.x, BENCH + 0.0005, JUG_HOME.z).setCcdEnabled(true).setAngularDamping(0.6));
+world.createCollider(RAPIER.ColliderDesc.cylinder(JUG_H / 2, JUG_R).setTranslation(0, JUG_H / 2, 0).setMass(0.45).setFriction(0.7), jugBody);
+const jug = new THREE.Group(); scene.add(jug);
+{ const jm = solidify(gPitcher.scene); jm.position.set(-0.0446, 0.079, 0); jm.traverse(o => { if (o.isMesh) o.frustumCulled = false; }); jug.add(jm); }
+const M_MILK = new THREE.MeshPhysicalMaterial({ color: 0xf4f1ea, roughness: 0.3, clearcoat: 0.3 });
+const jugMilk = new THREE.Mesh(new THREE.CircleGeometry(JUG_R - 0.003, 36), M_MILK); jugMilk.rotation.x = -Math.PI / 2; jugMilk.visible = false; jug.add(jugMilk);
+const bottleBody = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(BOTTLE_HOME.x, BENCH + 0.0005, BOTTLE_HOME.z).setCcdEnabled(true).setAngularDamping(0.6));
+world.createCollider(RAPIER.ColliderDesc.cylinder(BOTTLE_H / 2 - 0.005, BOTTLE_R).setTranslation(0, BOTTLE_H / 2, 0).setMass(1.2).setFriction(0.8), bottleBody);
+const bottle = new THREE.Group(); scene.add(bottle);
+{
+  const plastic = new THREE.MeshPhysicalMaterial({ color: 0xf7f7f2, roughness: 0.45, clearcoat: 0.2 });
+  bottle.add(lathe([[0, 0], [0.05, 0], [0.055, 0.01], [0.055, 0.19], [0.045, 0.225], [0.02, 0.245], [0.02, 0.255], [0, 0.255]], plastic));
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.015, 20), new THREE.MeshStandardMaterial({ color: 0x2d6fd1, roughness: 0.5 })), 0, 0.262, 0, bottle);
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 512, 128); g.fillStyle = '#2d6fd1'; g.fillRect(0, 0, 512, 34); g.fillRect(0, 100, 512, 28);
+  g.fillStyle = '#1d3f7a'; g.font = 'bold 40px Georgia'; g.fillText('FULL CREAM', 120, 76); g.font = '22px Georgia'; g.fillText('MILK · 2L', 330, 96);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.0555, 0.0555, 0.09, 40, 1, true), new THREE.MeshStandardMaterial({ map: t, roughness: 0.6 })), 0, 0.11, 0, bottle);
+}
+const milkStream = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.0042, 1, 8), M_MILK);
+milkStream.visible = false; scene.add(milkStream);
+
+// ─── the portafilter: ours, grabbable, locks into the left group ───
+const PF_DIR = new V3(0.3, -0.05, 0.95).normalize();
+const pfBody = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(PF_LOCK.x, PF_LOCK.y, PF_LOCK.z).setCcdEnabled(true).setAngularDamping(0.8));
+const pfCols = [world.createCollider(RAPIER.ColliderDesc.cylinder(0.0175, 0.043).setMass(0.35).setFriction(0.7), pfBody)];
+{
+  const mid = PF_DIR.clone().multiplyScalar(0.105);
+  pfCols.push(world.createCollider(RAPIER.ColliderDesc.capsule(0.055, 0.012).setTranslation(mid.x, mid.y, mid.z)
+    .setRotation(new QT().setFromUnitVectors(UP, PF_DIR)).setMass(0.15).setFriction(0.7), pfBody));
+}
+const pf = new THREE.Group(); scene.add(pf);
+pf.add(shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.043, 0.04, 0.035, 40), M.chrome)));
+add(new THREE.Mesh(new THREE.TorusGeometry(0.043, 0.004, 10, 40), M.chrome), 0, 0.016, 0, pf).rotation.x = Math.PI / 2;
+for (const sx of [-1, 1]) add(new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.006, 0.022, 12), M.chrome), sx * 0.012, -0.028, 0, pf);
+pf.add(rodMesh(PF_DIR.clone().multiplyScalar(0.035), PF_DIR.clone().multiplyScalar(0.062), 0.008, M.chrome));
+{
+  const h = new THREE.Mesh(new THREE.CapsuleGeometry(0.0125, 0.09, 8, 16), M.matte);
+  h.position.copy(PF_DIR.clone().multiplyScalar(0.112)); h.quaternion.setFromUnitVectors(UP, PF_DIR); pf.add(shadows(h));
+}
+const PF_GRIP = PF_DIR.clone().multiplyScalar(0.115);
+const M_GROUNDS = new THREE.MeshStandardMaterial({ color: 0x5a3820, roughness: 1 }), M_PUCK = new THREE.MeshStandardMaterial({ color: 0x2a1a10, roughness: 0.9 });
+const mound = new THREE.Mesh(new THREE.SphereGeometry(0.039, 28, 10, 0, Math.PI * 2, 0, Math.PI / 2), M_GROUNDS);
+mound.position.y = 0.0165; mound.visible = false; pf.add(mound);
+
+// ─── the cup: cup-and-saucer model, compound collider ───
+const cupBody = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+  .setTranslation(SPAWN.x, BENCH + CUP_H / 2 + 0.001, SPAWN.z).setCcdEnabled(true).setAngularDamping(0.6).setLinearDamping(0.05));
+const cupCol = world.createCollider(RAPIER.ColliderDesc.cylinder((CUP_H - SAUCER_H) / 2, CUP_R - 0.003).setTranslation(0, SAUCER_H / 2, 0).setMass(0.2).setFriction(0.8).setRestitution(0.1), cupBody);
+const saucerCol = world.createCollider(RAPIER.ColliderDesc.cylinder(SAUCER_H / 2, SAUCER_R).setTranslation(0, -CUP_H / 2 + SAUCER_H / 2, 0).setMass(0.1).setFriction(0.8).setRestitution(0.1), cupBody);
+const cup = new THREE.Group(); scene.add(cup);
+{
+  const m = gCup.scene; m.scale.setScalar(CUP_K);
+  m.traverse(o => {
+    if (!o.isMesh) return;
+    o.castShadow = o.receiveShadow = true;
+    if (o.name.startsWith('pSphere1')) o.material = M.chrome;          // spoon
+    else if (o.name.startsWith('polySurface3')) o.visible = false;      // the model's coffee: we draw our own so it can fill
+    else o.material = M.ceramic;
+  });
+  m.position.y = -CUP_H / 2; cup.add(m);
+}
+const liquidTop = new THREE.Mesh(new THREE.CircleGeometry(1, 48), M.crema);
+liquidTop.rotation.x = -Math.PI / 2; cup.add(liquidTop);
+const heartMat = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+  const grd = g.createRadialGradient(128, 128, 40, 128, 128, 128);
+  grd.addColorStop(0, '#c99a6a'); grd.addColorStop(0.8, '#9a5a2c'); grd.addColorStop(1, '#6e3b1a');
+  g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#f3e6d3'; g.beginPath(); g.moveTo(128, 196);
+  g.bezierCurveTo(60, 150, 52, 92, 92, 78); g.bezierCurveTo(112, 72, 124, 86, 128, 100);
+  g.bezierCurveTo(132, 86, 144, 72, 164, 78); g.bezierCurveTo(204, 92, 196, 150, 128, 196); g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.MeshStandardMaterial({ map: t, roughness: 0.35 });
+})();
+const M_LATTE = new THREE.MeshStandardMaterial({ color: 0xc9a27a, roughness: 0.4 });
+function updateLiquid(fill) {
+  liquidTop.visible = fill > 0.01;
+  liquidTop.position.y = -CUP_H / 2 + 0.018 + 0.038 * fill;
+  liquidTop.scale.setScalar(CUP_R * (0.6 + 0.37 * fill) - 0.0015);
+}
+const stream = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0028, 1, 8), M.coffee);
+stream.visible = false; scene.add(stream);
+
+// ─── the hand: physics is a palm box + fingertip box; the visual is a rigged first-person arm ───
+const palmBody = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+  .setTranslation(0.1, BENCH + P.hover, -0.05).setGravityScale(0).lockRotations().setCcdEnabled(true));
+world.createCollider(RAPIER.ColliderDesc.cuboid(0.042, 0.0125, 0.05).setMass(0.6).setFriction(0.6), palmBody);
+const tipCol = world.createCollider(RAPIER.ColliderDesc.cuboid(0.04, 0.015, 0.008).setTranslation(0, -0.025, -0.1).setMass(0.05).setFriction(0.6), palmBody);
+// collision groups (membership << 16 | filter): fingertips touch only cups, so they knock cups but never snag on the machine
+world.forEachCollider(c => c.setCollisionGroups(0x0001ffff));
+cupCol.setCollisionGroups(0x0004ffff); saucerCol.setCollisionGroups(0x0004ffff);
+tipCol.setCollisionGroups(0x00020004);
+// a locked-in portafilter touches only cups, so the hand can reach over and around its handle; loose, it collides with everything
+const pfGroups = locked => pfCols.forEach(c => c.setCollisionGroups(locked ? 0x00080004 : 0x0008ffff));
+pfGroups(true);
+
+const hand = new THREE.Group(); scene.add(hand);   // the palm's pose; the arm is solved to meet it
+const ARM_S = 0.0146;                              // model is in cm; this makes wrist→fingertip 19cm
+const arms = gArms.scene; arms.scale.setScalar(ARM_S); arms.rotation.y = Math.PI; scene.add(arms);
+arms.traverse(o => { if (o.isMesh) { o.material = M.skin; o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+const AB = n => arms.getObjectByName(n);
+const upper = AB('upper_armR_03'), fore = AB('forearmR_04'), foreEnd = AB('forearmR_end_051'), driver = AB('forearmR001_09');
+AB('clavicleL_05').scale.setScalar(1e-4); AB('forearmL001_030').scale.setScalar(1e-4);   // one arm only
+const S0 = new V3(0.24, 1.22, 0.36);   // resting shoulder: right of and below the eyes
+arms.updateMatrixWorld(true);
+const rootBase = arms.position.clone().add(S0.clone().sub(upper.getWorldPosition(new V3())));
+arms.position.copy(rootBase); arms.updateMatrixWorld(true);
+const wpos = o => o.getWorldPosition(new V3()), wq = o => o.getWorldQuaternion(new QT());
+const LA = wpos(upper).distanceTo(wpos(fore)), LB = wpos(fore).distanceTo(wpos(foreEnd));
+const upperBindQ = upper.quaternion.clone();
+// hand frame at bind: fingers → -z, index→pinky → +x, back of hand → +y
+let FL_INV, FORE_REL_INV;
+{
+  const wrist = wpos(driver), tip = wpos(AB('f_middle03R_end_054'));
+  const zA = wrist.clone().sub(tip).normalize();
+  let xA = wpos(AB('f_pinky01R_012')).sub(wpos(AB('f_index01R_027'))).normalize();
+  const yA = new V3().crossVectors(zA, xA).normalize(); xA = new V3().crossVectors(yA, zA).normalize();
+  const B = new QT().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xA, yA, zA));
+  const hb = wq(driver);
+  FL_INV = hb.clone().invert().multiply(B).invert();            // driverWorld = palmQ * FL_INV
+  FORE_REL_INV = wq(fore).invert().multiply(hb).invert();        // foreWorld ≈ handWorld * FORE_REL_INV (keeps wrist twist sane)
+}
+function setWorldQ(bone, q) { bone.quaternion.copy(wq(bone.parent).invert().multiply(q)); bone.updateMatrixWorld(true); }
+function aim(bone, child, target) {
+  const bp = wpos(bone), from = wpos(child).sub(bp).normalize(), to = target.clone().sub(bp).normalize();
+  setWorldQ(bone, new QT().setFromUnitVectors(from, to).multiply(wq(bone)));
+}
+const POLE = new V3(0.55, -0.8, 0.1);
+function poseArm() {
+  const palmQ = hand.quaternion, W = new V3(0, 0.004, 0.058).applyQuaternion(palmQ).add(hand.position);
+  const handQ = palmQ.clone().multiply(FL_INV);
+  // lean in: the shoulder moves toward the hand when it is out of reach
+  // the shoulder travels with the body; if the hand is still out of reach it leans in sideways, never across the eyes
+  const Sb = S0.clone().add(new V3(bodyX, 0, 0)), reach = (LA + LB) * 0.97; let S = Sb.clone();
+  const dW = W.distanceTo(Sb);
+  if (dW > reach) { const need = dW - reach; S.x += Math.sign(W.x - Sb.x) * Math.min(need, 0.25); S.z -= Math.max(0, need - 0.25); S.y -= Math.min(need, 0.1) * 0.5; }
+  arms.position.copy(rootBase).add(S.clone().sub(S0)); arms.updateMatrixWorld(true);
+  const d = Math.min(W.distanceTo(S), LA + LB - 1e-4), dir = W.clone().sub(S).normalize();
+  const x = (LA * LA - LB * LB + d * d) / (2 * d), h = Math.sqrt(Math.max(0, LA * LA - x * x));
+  const perp = POLE.clone().addScaledVector(dir, -POLE.dot(dir)).normalize();
+  const E = S.clone().addScaledVector(dir, x).addScaledVector(perp, h);
+  upper.quaternion.copy(upperBindQ); upper.updateMatrixWorld(true);
+  aim(upper, fore, E);
+  setWorldQ(fore, handQ.clone().multiply(FORE_REL_INV)); aim(fore, foreEnd, W);
+  setWorldQ(driver, handQ); driver.position.copy(driver.parent.worldToLocal(W.clone())); driver.updateMatrixWorld(true);
+}
+// finger rigs: each joint curls about whichever local axis moves its child toward the palm (found by testing)
+const AX = [new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1)];
+const _q = new QT();
+function calibrate(b, child, scoreFn) {
+  const rest = b.quaternion.clone(); let best = null;
+  const p0 = hand.worldToLocal(wpos(child));
+  for (const ax of AX) for (const sg of [1, -1]) {
+    b.quaternion.copy(rest).multiply(_q.setFromAxisAngle(ax, sg * 0.5)); b.updateMatrixWorld(true);
+    const sc = scoreFn(p0, hand.worldToLocal(wpos(child)));
+    if (!best || sc > best.sc) best = { sc, ax: ax.clone().multiplyScalar(sg) };
+  }
+  b.quaternion.copy(rest); b.updateMatrixWorld(true);
+  return { b, rest, ax: best.ax };
+}
+hand.position.set(0.1, BENCH + P.hover, -0.05); hand.updateMatrixWorld(true); poseArm(); hand.updateMatrixWorld(true);
+const palmCentre = hand.worldToLocal(wpos(AB('f_middle01R_016'))).add(new V3(0, -0.03, 0.02));
+const fingerDown = (p0, p1) => -(p1.y - p0.y) + 0.3 * (p1.z - p0.z) - 2 * Math.abs(p1.x - p0.x);
+const towardPalm = (p0, p1) => p0.distanceTo(palmCentre) - p1.distanceTo(palmCentre);
+const FINGER_BONES = [
+  ['f_index01R_027', 'f_index02R_028', 'f_index03R_029', 'f_index03R_end_057'],
+  ['f_middle01R_016', 'f_middle02R_017', 'f_middle03R_018', 'f_middle03R_end_054'],
+  ['f_ring01R_020', 'f_ring02R_021', 'f_ring03R_022', 'f_ring03R_end_055'],
+  ['f_pinky01R_012', 'f_pinky02R_013', 'f_pinky03R_014', 'f_pinky03R_end_053'],
+  ['thumb01R_023', 'thumb02R_024', 'thumb03R_025', 'thumb03R_end_056'],
+];
+const rigs = FINGER_BONES.map((ch, i) => ch.slice(0, 3).map((n, k) => calibrate(AB(n), AB(ch[k + 1]), i === 4 ? towardPalm : fingerDown)));
+const CURL = {   // radians per joint: [open, closed]
+  finger: [[0.1, 1.2], [0.1, 1.4], [0.05, 0.9]],
+  thumb: [[0.0, 0.5], [0.0, 0.6], [0.0, 0.8]],
+};
+
+// ─── input ───
+const keys = {};
+const DIGIT_KEYS = ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'Space'];
+let lowered = false;
+const target = new V3(0.1, BENCH + P.hover, -0.05);
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+const plane = new THREE.Plane(UP, -(BENCH + 0.15)), hit = new V3();
+let practiceStart = null;
+const firstInput = () => { if (practiceStart == null) practiceStart = performance.now(); audio(); };
+let hasPointer = false;
+renderer.domElement.addEventListener('pointermove', e => {
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); hasPointer = true;
+});
+// the cursor ray is cut at the height of the hand's grip point, so the fingers sit under the cursor at any height,
+// and reaching down slides the hand along the cursor's line of sight onto whatever you clicked
+let reachObj = null, wasLowered = false;
+// what did you click? a mesh hit first, then the nearest grip point within 60px on screen
+function pickUnderCursor() {
+  if (!hasPointer) return null;
+  ray.setFromCamera(ndc, camera);
+  const vis = [[cup, 'cup'], [pf, 'portafilter'], [tamper, 'tamper'], [jug, 'jug'], [bottle, 'milk']];
+  const hits = ray.intersectObjects(vis.map(v => v[0]), true);
+  for (const h of hits) {
+    let o = h.object; while (o && !vis.some(v => v[0] === o)) o = o.parent;
+    const g = o && GRABS.find(g => g.name === vis.find(v => v[0] === o)[1]);
+    if (g && !(g.name === 'cup' && S.respawnT > 0)) return g;
+  }
+  let best = null, bd = 60;
+  for (const g of GRABS) {
+    if (g.name === 'cup' && S.respawnT > 0) continue;
+    for (const pt of [gripPoint(g), v3(g.body.translation())]) {
+      const sp = pt.project(camera), d = Math.hypot((sp.x - ndc.x) * innerWidth / 2, (sp.y - ndc.y) * innerHeight / 2);
+      if (d < bd) { bd = d; best = g; }
+    }
+  }
+  return best;
+}
+function aimFromCursor() {
+  if (!hasPointer) return;
+  // reaching for something you clicked: lock onto its grip, so the hand can't slide off along the cursor ray
+  if (lowered && !wasLowered && !S.held) reachObj = pickUnderCursor();
+  if (!lowered) reachObj = null;
+  wasLowered = lowered;
+  if (reachObj && lowered && !S.held) { const gp = gripPoint(reachObj); target.x = gp.x; target.z = gp.z; return; }
+  if (P.mode === 'easy' && S.easy === 'placing') return;   // setting down: hold the spot where you let go
+  // cut at the height the hand is heading for, not where it is: if something blocks the hand, the aim mustn't run away
+  plane.constant = -(target.y - 0.035);
+  ray.setFromCamera(ndc, camera);
+  if (ray.ray.intersectPlane(plane, hit)) {
+    target.x = THREE.MathUtils.clamp(hit.x, -0.7, 0.7);
+    target.z = THREE.MathUtils.clamp(hit.z, -0.5, 0.14);
+  }
+}
+let mouseHeld = false, tilting = false, tiltStartX = 0, tiltTarget = 0;
+renderer.domElement.addEventListener('pointerdown', e => {
+  if (e.button === 0) { mouseHeld = true; if (P.mode !== 'easy') lowered = true; }
+  if (e.button === 2) { tilting = true; tiltStartX = e.clientX; tiltTarget = 0; }
+  firstInput();
+});
+addEventListener('pointerup', e => {
+  if (e.button === 0) { mouseHeld = false; if (P.mode !== 'easy') lowered = false; }
+  if (e.button === 2) tilting = false;
+});
+addEventListener('pointermove', e => { if (tilting) tiltTarget = THREE.MathUtils.clamp((e.clientX - tiltStartX) / 180, -1.6, 1.6); });
+renderer.domElement.addEventListener('wheel', e => { e.preventDefault(); S.heightAdj = THREE.MathUtils.clamp(S.heightAdj - e.deltaY * 0.0003, -0.28, 0.08); }, { passive: false });
+addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('.lil-gui')) return;
+  if (e.code === 'Space') e.preventDefault();
+  if (e.repeat) return;
+  keys[e.code] = true; firstInput();
+  if (e.code === 'KeyG') { P.mode = { easy: 'fingers', fingers: 'grip', grip: 'easy' }[P.mode]; save(); gui.controllersRecursive().forEach(c => c.updateDisplay()); buildFingerHud(); }
+  if (e.code === 'KeyR') freshCup('You binned it');
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; lowered = false; mouseHeld = false; tilting = false; });
+
+// ─── audio (synthesised) ───
+let ac = null;
+function audio() { try { if (!ac) ac = new AudioContext(); if (ac.state === 'suspended') ac.resume(); } catch {} return ac; }
+function clink(vol, base = 2350) {
+  if (!ac) return; const t = ac.currentTime;
+  [1, 1.58, 2.19].forEach((m, i) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = base * m * (1 + (Math.random() - 0.5) * 0.04);
+    g.gain.setValueAtTime(vol * [0.22, 0.12, 0.06][i], t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28 - i * 0.07);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + 0.3);
+  });
+}
+function clunk() {
+  if (!ac) return; const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'triangle'; o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(90, t + 0.12);
+  g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + 0.22); clink(0.4, 1400);
+}
+function noise(dur, freq, q, vol, type = 'bandpass') {
+  if (!ac) return null; const t = ac.currentTime;
+  const buf = ac.createBuffer(1, ac.sampleRate * dur, ac.sampleRate); const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const src = ac.createBufferSource(); src.buffer = buf;
+  const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  const g = ac.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.05); g.gain.setValueAtTime(vol, t + dur - 0.15); g.gain.linearRampToValueAtTime(0, t + dur);
+  src.connect(f).connect(g).connect(ac.destination); src.start(t);
+  return src;
+}
+
+// ─── HUD ───
+const $docket = document.getElementById('docket'), $toast = document.getElementById('toast');
+const $fingers = document.getElementById('fingers'), $grip = document.getElementById('grip');
+let toastTimer = 0;
+function toast(html, secs = 1.8) { $toast.innerHTML = html; $toast.style.opacity = 1; toastTimer = secs; }
+const HELP = {
+  easy: '<kbd>mouse</kbd> move hand · hold <kbd>click</kbd> grab · release to put down<br><kbd>scroll</kbd> hand height · <kbd>right-drag</kbd> tilt to pour<br><kbd>G</kbd> Surgeon mode · <kbd>R</kbd> fresh cup',
+  fingers: '<kbd>mouse</kbd> move hand · hold <kbd>click</kbd> lower · <kbd>scroll</kbd> height<br><kbd>space</kbd> thumb · <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd> index→pinky (thumb + 2 to grab)<br><kbd>Q</kbd><kbd>E</kbd> roll wrist · <kbd>G</kbd> grip mode · <kbd>R</kbd> fresh cup',
+  grip: '<kbd>mouse</kbd> move hand · hold <kbd>click</kbd> lower · <kbd>scroll</kbd> height<br><kbd>space</kbd> close hand<br><kbd>Q</kbd><kbd>E</kbd> roll wrist · <kbd>G</kbd> easy mode · <kbd>R</kbd> fresh cup',
+};
+function buildFingerHud() {
+  document.getElementById('help').innerHTML = HELP[P.mode];
+  if (P.mode === 'easy') { $fingers.innerHTML = ''; return; }
+  $fingers.innerHTML = P.mode === 'fingers'
+    ? '<div class="f thumb" data-i="4">space</div>' + ['A', 'S', 'D', 'F'].map((k, i) => `<div class="f" data-i="${i}">${k}</div>`).join('')
+    : '<div class="f thumb" data-i="4" style="width:160px">space · grip</div>';
+}
+buildFingerHud();
+
+// ─── grabbables ───
+const v3 = v => new V3(v.x, v.y, v.z);
+const q4 = q => new QT(q.x, q.y, q.z, q.w);
+const GRABS = [
+  { name: 'cup', body: cupBody, local: new V3(0, CUP_H / 2, 0) },
+  { name: 'portafilter', body: pfBody, local: PF_GRIP },
+  { name: 'tamper', body: tamperBody, local: new V3(0, 0.1026, 0) },
+  { name: 'jug', body: jugBody, local: new V3(-0.056, 0.085, 0) },        // by the handle, so the wand can get in
+  { name: 'milk', body: bottleBody, local: new V3(0, 0.27, 0) },
+];
+// how far below the palm the held thing's bottom hangs: placing sets it down on the surface, not the palm
+const objBottom = g => v3(g.body.translation()).y - (g.name === 'cup' ? CUP_H / 2 : g.name === 'portafilter' ? 0.0175 : 0);
+const gripPoint = g => g.local.clone().applyQuaternion(q4(g.body.rotation())).add(v3(g.body.translation()));
+
+// ─── game state ───
+const S = {
+  phase: 'toMachine', time: 0, roundStart: 0, t1: null, fill: 0, art: false,
+  shotT: 0, restT: 0, failT: 0, resultT: 0, respawnT: 0, runs: [],
+  grade: 'none', joint: null, held: null, grabDist: 0, pfLocked: true, pfArmed: false,
+  curl: [0, 0, 0, 0, 0], closed: [false, false, false, false, false], onObj: [false, false, false, false, false],
+  roll: 0, prevV: new V3(), aSm: 0, clinkCd: 0, spillAcc: 0,
+  heightAdj: 0, wantClose: false, easy: 'idle', easyT: 0,
+  jug: { ml: 0, temp: 4, foam: 0, scalded: false }, bottleMl: BOTTLE_ML, bottleGoneT: 0, milkWasted: 0, steamMode: null,
+  cupMilk: 0, cupMilkTemp: 0, cupFoam: 0, cupScalded: false,
+  hang: 0.09, pfAt: 'group', pfFrom: null, dose: 0, tamp: 0, tampQ: 1, puck: false, shotQ: 1, shotNote: '', overflowWarned: false,
+};
+let grindNoise = null;
+let shotNoise = null;
+
+function setGrip(g, obj) {
+  if (S.joint) { world.removeImpulseJoint(S.joint, true); S.joint = null; }
+  S.grade = g;
+  if (g === 'none') { S.held = null; return; }
+  S.held = obj;
+  if (obj.name === 'portafilter' && S.pfLocked) { S.pfLocked = false; S.pfArmed = false; S.pfFrom = S.pfAt; S.pfAt = null; pfGroups(false); pfBody.setBodyType(RAPIER.RigidBodyType.Dynamic, true); clink(0.25, 1600); }
+  const body = obj.body;
+  const pp = v3(palmBody.translation()), inv = q4(palmBody.rotation()).invert();
+  const cp = v3(body.translation()), cq = q4(body.rotation());
+  let params;
+  if (g === 'firm') {
+    const rel = cp.clone().sub(pp).applyQuaternion(inv);
+    const f1 = inv.clone().multiply(cq);
+    params = RAPIER.JointData.fixed(rel, { x: f1.x, y: f1.y, z: f1.z, w: f1.w }, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0, w: 1 });
+  } else {
+    const rel = gripPoint(obj).sub(pp).applyQuaternion(inv);
+    params = RAPIER.JointData.spherical(rel, obj.local);
+  }
+  S.grabDist = pp.distanceTo(cp);
+  S.hang = pp.y - objBottom(obj);
+  if (obj.name === 'portafilter' && S.puck && !S.knockHinted) { S.knockHinted = true; toast('Bang the old puck out<small>in the knock box, front left</small>', 1.8); }
+  S.joint = world.createImpulseJoint(params, palmBody, body, true);
+  S.joint.setContactsEnabled(false);
+}
+function dropGrip() { setGrip('none'); S.onObj.fill(false); }
+// the portafilter docks in two places: the group (to brew) and the grinder fork (to dose)
+const pfPose = () => S.pfAt === 'fork' ? FORK_POSE : PF_LOCK;
+function lockPortafilter(msg, where = 'group') {
+  if (S.held?.name === 'portafilter') { dropGrip(); S.needRelease = true; }   // it clicked in: don't re-grab until the button comes up
+  S.pfLocked = true; S.pfAt = where; pfGroups(true);
+  const at = pfPose();
+  pfBody.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
+  pfBody.setTranslation(at, true); pfBody.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+  pfBody.setNextKinematicTranslation(at); pfBody.setNextKinematicRotation({ x: 0, y: 0, z: 0, w: 1 });
+  if (msg) { clunk(); toast(msg, 1.1); }
+}
+function freshCup(msg) {
+  if (msg) toast(msg + '<small>grab a fresh cup</small>', 1.4);
+  if (S.held?.name === 'cup') dropGrip();
+  S.respawnT = msg ? 0.8 : 0.0001;
+  cupBody.setTranslation({ x: 0, y: -5, z: 3 }, true); cupBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  cupBody.setGravityScale(0, true);
+  S.fill = 0; S.art = false; liquidTop.material = M.crema; S.phase = 'toMachine'; S.shotT = 0;
+  S.cupMilk = 0; S.cupMilkTemp = 0; S.cupFoam = 0; S.cupScalded = false;
+  if (shotNoise) { try { shotNoise.stop(); } catch {} shotNoise = null; }
+  stream.visible = false;
+}
+function placeCup() {
+  cupBody.setGravityScale(1, true);
+  cupBody.setTranslation({ x: SPAWN.x, y: BENCH + CUP_H / 2 + 0.002, z: SPAWN.z }, true);
+  cupBody.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+  cupBody.setLinvel({ x: 0, y: 0, z: 0 }, true); cupBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  S.prevV.set(0, 0, 0); S.aSm = 0;
+}
+const surfaceAt = (x, z) => (Math.abs(x) < 0.47 && z > RECESS_BACK && z < MACHINE_FRONT) ? TRAY_TOP
+  : (Math.abs(x - PASS.x) < 0.11 && Math.abs(z - PASS.z) < 0.085) ? PASS_TOP : BENCH;
+const surfaceNear = (x, z, r) => { let m = surfaceAt(x, z); for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; m = Math.max(m, surfaceAt(x + Math.cos(a) * r, z + Math.sin(a) * r)); } return m; };
+
+// droplets + puddles
+const DROPS = 140, drops = [];
+const dropMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.0035, 6, 4), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15 }), DROPS);
+const DROP_COL = { coffee: new THREE.Color(0x2e170b), milk: new THREE.Color(0xf4f1ea) };
+for (let i = 0; i < DROPS; i++) dropMesh.setColorAt(i, DROP_COL.coffee);
+dropMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(dropMesh);
+for (let i = 0; i < DROPS; i++) drops.push({ p: new V3(), v: new V3(), alive: false });
+const puddleGeo = new THREE.CircleGeometry(1, 20); puddleGeo.rotateX(-Math.PI / 2);
+const puddleMat = new THREE.MeshPhysicalMaterial({ color: 0x2e170b, roughness: 0.05, clearcoat: 1, transparent: true, opacity: 0.9, polygonOffset: true, polygonOffsetFactor: -2 });
+const puddles = []; let puddleIx = 0, dropIx = 0;
+const puddleMilkMat = new THREE.MeshPhysicalMaterial({ color: 0xf4f1ea, roughness: 0.1, clearcoat: 1, transparent: true, opacity: 0.92, polygonOffset: true, polygonOffsetFactor: -2 });
+for (let i = 0; i < 70; i++) { const m = new THREE.Mesh(puddleGeo, puddleMat); m.visible = false; m.receiveShadow = true; scene.add(m); puddles.push(m); }
+function spawnDrop(p, v, kind = 'coffee') { dropIx = (dropIx + 1) % DROPS; const d = drops[dropIx]; d.alive = true; d.kind = kind; d.p.copy(p); d.v.copy(v); dropMesh.setColorAt(dropIx, DROP_COL[kind]); dropMesh.instanceColor.needsUpdate = true; }
+const _m = new THREE.Matrix4(), _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+function stepDrops(dt) {
+  drops.forEach((d, i) => {
+    if (!d.alive) { dropMesh.setMatrixAt(i, _zero); return; }
+    d.v.y -= 9.81 * dt; d.p.addScaledVector(d.v, dt);
+    const s = surfaceAt(d.p.x, d.p.z);
+    if (d.p.y <= s + 0.001 && d.p.y > s - 0.03) {
+      d.alive = false;
+      const m = puddles[puddleIx = (puddleIx + 1) % puddles.length];
+      m.visible = true; m.material = d.kind === 'milk' ? puddleMilkMat : puddleMat; m.position.set(d.p.x, s + 0.0006, d.p.z); m.scale.setScalar(0.006 + Math.random() * 0.012);
+    } else if (d.p.y < 0) d.alive = false;
+    _m.makeTranslation(d.p.x, d.p.y, d.p.z); dropMesh.setMatrixAt(i, _m);
+  });
+  dropMesh.instanceMatrix.needsUpdate = true;
+}
+
+// reaching with an empty hand: drop to just above the grip point under the cursor, else to the surface
+function reachHeight() {
+  if (reachObj) return gripPoint(reachObj).y + 0.035;
+  for (const g of GRABS) {
+    if (g.name === 'cup' && S.respawnT > 0) continue;
+    const gp = gripPoint(g);
+    if (Math.hypot(gp.x - target.x, gp.z - target.z) < 0.06) return gp.y + 0.035;
+  }
+  return surfaceAt(target.x, target.z) + P.lowerOffset;
+}
+// easy hands: hold click = reach down and grip; release = set down and let go
+function easyStep(dt) {
+  const py = palmBody.translation().y;
+  // arrival is judged against the height this state is heading for, not last frame's target
+  const goalY = S.easy === 'placing' ? surfaceNear(target.x, target.z, 0.06) + S.hang + 0.004 : reachHeight();
+  const arrived = S.easyT > 0.05 && Math.abs(py - goalY) < 0.012;
+  S.easyT += dt;
+  const go = st => { S.easy = st; S.easyT = 0; };
+  switch (S.easy) {
+    case 'idle': lowered = false; S.wantClose = false;
+      if (!mouseHeld) S.needRelease = false; else if (!S.needRelease) go('reaching');
+      break;
+    case 'reaching': lowered = true;
+      if (!S.wantClose && (arrived || S.easyT > 0.5)) S.wantClose = true;
+      if (S.held) go('holding'); else if (!mouseHeld) go('idle');
+      break;
+    case 'holding': lowered = false;
+      if (!S.held) { S.latched = false; go(mouseHeld && !S.needRelease ? 'reaching' : 'idle'); }
+      else if (S.latched) { if (mouseHeld) S.latched = false; }
+      else if (!mouseHeld) go('placing');
+      break;
+    case 'placing': lowered = true;
+      if (mouseHeld && S.held) { go('holding'); break; }
+      if (arrived || S.easyT > 1.0) S.wantClose = false;
+      if (!S.held && S.curl[0] < 0.5) go('idle');
+      break;
+  }
+}
+
+// ─── espresso chain: dose in the fork, tamp on the bench, knock the puck out ───
+function espressoChain(dt) {
+  // grinding runs hands-free while docked in the fork; leave it too long and it overflows
+  const grinding = S.pfAt === 'fork' && !S.puck;
+  if (S.pfAt === 'fork' && S.puck && S.dose > 0) { if (!S.puckWarned) { toast('Knock the old puck out first', 1.4); S.puckWarned = true; } }
+  else S.puckWarned = false;
+  if (grinding) {
+    S.dose = Math.min(1.45, S.dose + dt / 5.3);   // ~3.5 g/s: a two-second window between sour and overflowing
+    if (!grindNoise) grindNoise = noise(20, 1700, 1.2, 0.05);
+    const top = FORK_POSE.y + 0.0165 + 0.039 * moundScale();
+    grindStream.visible = true; grindStream.position.set(FORK_POSE.x, (CHUTE_Y + top) / 2, FORK_POSE.z); grindStream.scale.y = Math.max(0.001, CHUTE_Y - top);
+    if (S.dose > 1.18) {
+      if (!S.overflowWarned) { toast('Overflowing!', 1); S.overflowWarned = true; }
+      if (Math.random() < 0.5) spawnDrop(new V3(FORK_POSE.x + (Math.random() - 0.5) * 0.08, FORK_POSE.y + 0.03, FORK_POSE.z + (Math.random() - 0.5) * 0.08), new V3((Math.random() - 0.5) * 0.2, 0, (Math.random() - 0.5) * 0.2));
+    }
+  } else {
+    grindStream.visible = false; S.overflowWarned = false;
+    if (grindNoise) { try { grindNoise.stop(); } catch {} grindNoise = null; }
+  }
+  // tamp: set the tamper down roughly on the coffee and it seats itself, centred and upright.
+  // How close you got still sets the quality, gently: within 2cm is perfect, 6.5cm off is about half.
+  if (!S.pfLocked && S.dose > 0.25 && !S.puck && S.tamp < 1) {
+    const tb = v3(tamperBody.translation()), pfQ = q4(pfBody.rotation()), pfUp = UP.clone().applyQuaternion(pfQ);
+    const basketTop = v3(pfBody.translation()).addScaledVector(pfUp, 0.0175);
+    const off = Math.hypot(tb.x - basketTop.x, tb.z - basketTop.z), dy = tb.y - basketTop.y;
+    const pfStill = v3(pfBody.linvel()).length() < 0.08 && S.held?.name !== 'portafilter' && pfUp.y > 0.85;
+    const heldT = S.held?.name === 'tamper';
+    const setDown = heldT ? (P.mode !== 'easy' || S.easy === 'placing') : true;   // releasing it (or lowering it) over the coffee
+    if (pfStill && !heldT && !S.tampHinted && !S.tampSeat) { S.tampHinted = true; toast('Now tamp it<small>set the tamper down on the coffee</small>', 1.6); }
+    if (pfStill && (S.tampSeat || (setDown && off < 0.065 && dy > -0.03 && dy < 0.09))) {
+      if (!S.tampSeat) { S.tampSeat = true; S.tampQ = THREE.MathUtils.clamp(1 - Math.max(0, off - 0.02) / 0.09, 0.5, 1); if (heldT) dropGrip(); }
+      tamperBody.setTranslation(basketTop, true); tamperBody.setRotation({ x: pfQ.x, y: pfQ.y, z: pfQ.z, w: pfQ.w }, true);
+      tamperBody.setLinvel({ x: 0, y: 0, z: 0 }, true); tamperBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      S.tamp = Math.min(1, S.tamp + dt / 0.5);
+      if (S.tamp >= 1) { S.tampSeat = false; clunk(); toast(S.tampQ > 0.85 ? 'Tamped. Nice and level.' : 'Tamped, a bit off-centre', 1.2); }
+    }
+  } else S.tampSeat = false;
+  // knock: bang the basket down into the knock box
+  if (S.puck && !S.pfLocked) {
+    const b = v3(pfBody.translation());
+    // anywhere over the box, brought down to within a few cm of the rim, counts as a bang
+    const downward = v3(pfBody.linvel()).y < -0.1 || S.held?.name !== 'portafilter';
+    if (Math.hypot(b.x - KNOCK.x, b.z - KNOCK.z) < KNOCK_R + 0.01 && b.y < BENCH + KNOCK_H + 0.06 && downward) {
+      S.puck = false; S.knockHinted = false; S.tampHinted = false; S.dose = 0; S.tamp = 0; S.tampQ = 1; clunk(); toast('Knocked out', 1);
+      // a barista bangs it and keeps hold: stay holding until the next click
+      if (S.held?.name === 'portafilter' && P.mode === 'easy') { S.easy = 'holding'; S.easyT = 0; S.latched = true; }
+    }
+  }
+}
+// dome height: heaped while loose, flat once tamped
+const moundScale = () => S.tamp >= 1 || S.puck ? 0.16 : 0.12 + 0.7 * Math.min(S.dose, 1.45);
+function shotQuality() {
+  const d = S.dose;
+  const doseQ = d < 0.8 ? Math.max(0.2, 1 - (0.8 - d) * 2.5) : d > 1.15 ? Math.max(0.3, 1 - (d - 1.15) * 2.5) : 1;
+  const tampF = S.tamp >= 1 ? 0.6 + 0.4 * Math.max(0, S.tampQ) : 0.35;
+  S.shotNote = d < 0.8 ? 'Sour. Under-dosed.' : d > 1.15 ? 'Bitter. Overdosed.' : S.tamp < 1 ? 'Watery. It wasn’t tamped.' : S.tampQ < 0.8 ? 'Uneven. Tamp level.' : '';
+  return doseQ * tampF;
+}
+
+// ─── milk chain: bottle → jug → wand → cup ───
+const cupLevel = () => (S.fill * SHOT_ML + S.cupMilk) / CUP_ML;
+const jugSurfaceH = () => Math.min(JUG_H - 0.002, 0.006 + (S.jug.ml * (1 + S.jug.foam * 0.6)) / JUG_ML * (JUG_H - 0.01));
+let steamSnd = null;
+function steamAudio(mode, temp) {
+  if (!ac) return;
+  if (!steamSnd) {
+    const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = ac.createBufferSource(); src.buffer = buf; src.loop = true;
+    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; const g = ac.createGain(); g.gain.value = 0;
+    src.connect(bp).connect(g).connect(ac.destination); src.start(); steamSnd = { bp, g };
+  }
+  const t = ac.currentTime, heat = THREE.MathUtils.clamp((temp - 4) / 66, 0, 1);
+  // stretching tears like paper (high, jittery); rolling is a low rumble; both drop in pitch as the milk heats
+  if (mode === 'stretch') { steamSnd.bp.frequency.setTargetAtTime(4200 - 1800 * heat, t, 0.05); steamSnd.bp.Q.value = 1.2; steamSnd.g.gain.setTargetAtTime(0.06 + 0.07 * Math.random(), t, 0.01); }
+  else if (mode === 'roll') { steamSnd.bp.frequency.setTargetAtTime(1300 - 700 * heat, t, 0.08); steamSnd.bp.Q.value = 0.8; steamSnd.g.gain.setTargetAtTime(0.07, t, 0.05); }
+  else steamSnd.g.gain.setTargetAtTime(0, t, 0.05);
+}
+function spillMilk(at, ml, vel) {
+  S.milkWasted += ml; S.milkSpillAcc = (S.milkSpillAcc || 0) + ml / 3;
+  while (S.milkSpillAcc > 1) { S.milkSpillAcc -= 1; spawnDrop(at, (vel || new V3()).clone().add(new V3((Math.random() - .5) * .08, -0.1, (Math.random() - .5) * .08)), 'milk'); }
+}
+function showStream(from, toY) { milkStream.visible = true; milkStream.position.set(from.x, (from.y + toY) / 2, from.z); milkStream.scale.y = Math.max(0.001, from.y - toY); }
+function milkChain(dt) {
+  milkStream.visible = false;
+  const J = S.jug, jp = v3(jugBody.translation()), jq = q4(jugBody.rotation()), jUp = UP.clone().applyQuaternion(jq);
+  const jugTop = jp.clone().addScaledVector(jUp, JUG_H);
+  // 1. bottle → jug
+  const bq = q4(bottleBody.rotation()), bUp = UP.clone().applyQuaternion(bq);
+  const bTilt = THREE.MathUtils.radToDeg(bUp.angleTo(UP));
+  if (S.bottleMl > 0 && bTilt > 55 && S.bottleGoneT <= 0) {
+    const ml = Math.min(S.bottleMl, Math.min(1, (bTilt - 55) / 35) * 200 * dt); S.bottleMl -= ml;
+    const sp = new V3(0, 0.262, 0).applyQuaternion(bq).add(v3(bottleBody.translation()));
+    if (Math.hypot(sp.x - jugTop.x, sp.z - jugTop.z) < JUG_R + 0.035 && sp.y > jugTop.y - 0.01 && jUp.y > 0.8) {   // filling the jug is busywork, not skill: roughly over it is enough
+      J.temp = (J.temp * J.ml + 4 * ml) / (J.ml + ml); J.foam *= J.ml / (J.ml + ml); J.ml += ml;
+      showStream(sp, jp.y + jugSurfaceH());
+    } else { spillMilk(sp, ml); showStream(sp, BENCH); }
+    if (S.bottleMl <= 0) toast('Out of milk<small>a fresh bottle’s on its way</small>', 1.6);
+  }
+  if (S.bottleMl <= 0 && S.held?.name !== 'milk') {
+    // empty bottle goes back to the fridge; a full one arrives a few seconds later (the cost of running out)
+    if (S.bottleGoneT <= 0) { S.bottleGoneT = 4; bottleBody.setTranslation({ x: 3, y: -5, z: 3 }, true); bottleBody.setGravityScale(0, true); bottleBody.setLinvel({ x: 0, y: 0, z: 0 }, true); }
+  }
+  if (S.bottleGoneT > 0) {
+    S.bottleGoneT -= dt;
+    if (S.bottleGoneT <= 0) { S.bottleMl = BOTTLE_ML; bottleBody.setGravityScale(1, true); bottleBody.setTranslation({ x: BOTTLE_HOME.x, y: BENCH + 0.001, z: BOTTLE_HOME.z }, true); bottleBody.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true); toast('Fresh milk', 1); }
+  }
+  // 2. jug overflow from foam, overfilling
+  const expanded = J.ml * (1 + J.foam * 0.6);
+  if (expanded > JUG_ML) { const over = Math.min(J.ml, (expanded - JUG_ML) / (1 + J.foam * 0.6)); J.ml -= over; spillMilk(jugTop, over); }
+  // 3. steam: only while the wand tip is in the milk. Just under the surface stretches; deeper rolls and heats.
+  const tipL = WAND_TIP.clone().sub(jp).applyQuaternion(jq.clone().invert());
+  const surf = jugSurfaceH();
+  const inMilk = J.ml > 40 && Math.hypot(tipL.x, tipL.z) < JUG_R - 0.005 && tipL.y > 0.006 && tipL.y < surf && jUp.y > 0.8;
+  S.steamMode = null;
+  if (inMilk) {
+    const k = THREE.MathUtils.clamp(300 / J.ml, 0.6, 2.2), depth = surf - tipL.y;
+    // ~200ml: about 8s from fridge-cold to 60°C, leaving a ~1.5s 'just right' window to hear and react to
+    if (depth < 0.012) { S.steamMode = 'stretch'; J.foam = Math.min(1, J.foam + dt * 0.08 * k); J.temp += dt * 3 * k; }
+    else { S.steamMode = 'roll'; J.temp += dt * 5 * k; }
+    if (J.temp > 70 && !J.scalded) { J.scalded = true; toast('Scalded!<small>that milk’s ruined, tip it out</small>', 1.8); }
+  } else J.temp += (20 - J.temp) * Math.min(1, dt * 0.004);
+  steamAudio(S.steamMode, J.temp);
+  // 4. jug → cup (or the bench). The fuller the jug, the less you need to tilt.
+  const jTilt = THREE.MathUtils.radToDeg(jUp.angleTo(UP)), thresh = 70 - Math.min(1, J.ml / JUG_ML) * 50;   // full: pours at 20°; near empty: 70°
+  if (J.ml > 2 && jTilt > thresh) {
+    const ml = Math.min(J.ml, Math.min(1, (jTilt - thresh) / 25) * 110 * dt); J.ml -= ml;
+    const low = new V3(jUp.x, 0, jUp.z).normalize(), spoutDir = new V3(1, 0, 0).applyQuaternion(jq).setY(0).normalize();
+    const fromSpout = low.dot(spoutDir) > 0.6;
+    const at = fromSpout ? new V3(JUG_R + 0.012, JUG_H, 0).applyQuaternion(jq).add(jp) : jugTop.clone().addScaledVector(low, JUG_R);
+    const cp = v3(cupBody.translation()), cUp = UP.clone().applyQuaternion(q4(cupBody.rotation())), ct = cp.clone().addScaledVector(cUp, CUP_H / 2);
+    if (S.respawnT <= 0 && Math.hypot(at.x - ct.x, at.z - ct.z) < CUP_R + 0.004 && at.y > ct.y - 0.005 && cUp.y > 0.85) {
+      const tot = S.cupMilk + ml;
+      S.cupMilkTemp = (S.cupMilkTemp * S.cupMilk + J.temp * ml) / tot; S.cupFoam = (S.cupFoam * S.cupMilk + J.foam * ml) / tot; S.cupMilk = tot;
+      if (J.scalded) S.cupScalded = true;
+      if (cupLevel() > 1.03) { const over = (cupLevel() - 1.03) * CUP_ML; S.cupMilk -= over; spillMilk(ct, over); }
+      showStream(at, cp.y - CUP_H / 2 + 0.018 + 0.038 * Math.min(1, cupLevel()));
+    } else { spillMilk(at, ml); showStream(at, surfaceAt(at.x, at.z)); }
+  }
+  if (J.ml < 1) { J.ml = 0; J.foam = 0; J.temp = 4; J.scalded = false; }
+  // latte art appears when the cup is topped up with well-stretched, well-heated milk
+  S.art = S.cupMilk > 60 && cupLevel() >= 0.85 && S.cupFoam >= 0.12 && S.cupFoam <= 0.45 && !S.cupScalded && S.cupMilkTemp > 45;
+  // dropped jug or bottle: back home (the jug empty)
+  if (jp.y < BENCH - 0.06) { if (S.held?.name === 'jug') dropGrip(); S.milkWasted += J.ml; J.ml = 0; jugBody.setTranslation({ x: JUG_HOME.x, y: BENCH + 0.001, z: JUG_HOME.z }, true); jugBody.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true); jugBody.setLinvel({ x: 0, y: 0, z: 0 }, true); toast('Dropped the jug', 1); }
+  if (v3(bottleBody.translation()).y < BENCH - 0.06 && S.bottleGoneT <= 0) { if (S.held?.name === 'milk') dropGrip(); S.bottleMl = 0; }
+}
+function milkWord() {
+  const J = S.jug;
+  if (J.scalded) return 'scalded';
+  if (J.ml < 40) return 'empty jug';
+  return J.temp < 35 ? 'cold' : J.temp < 55 ? 'warming' : J.temp <= 66 ? 'just right' : 'too hot';
+}
+
+// ─── physics step ───
+const qTarget = new QT(), qYaw = new QT(), qRoll = new QT();
+const Z = new V3(0, 0, 1);
+const ELBOW_DIR_FROM = new V3(0.55, 1.0, 0.35);   // the hand points away from here, like a real wrist
+function step(dt) {
+  S.time += dt;
+  aimFromCursor();
+  const qe = (keys.KeyQ ? 1 : 0) - (keys.KeyE ? 1 : 0);
+  if (P.mode === 'easy' && tilting) S.roll += (-tiltTarget - S.roll) * Math.min(1, dt * 8);           // right-drag tilts
+  else if (qe) S.roll = THREE.MathUtils.clamp(S.roll + qe * P.rollSpeed * dt, -1.7, 1.7);
+  else if (P.mode === 'easy') S.roll += (0 - S.roll) * Math.min(1, dt * 4);                           // eases back level
+  if (P.mode === 'easy') easyStep(dt);
+  for (let i = 0; i < 5; i++) {
+    const want = P.mode === 'easy' ? S.wantClose : P.mode === 'grip' ? !!keys.Space : !!keys[DIGIT_KEYS[i]];
+    S.curl[i] += ((want ? 1 : 0) - S.curl[i]) * Math.min(1, dt * P.curlSpeed);
+  }
+  if (S.pfLocked) pfBody.setNextKinematicTranslation(pfPose());
+
+  // arm: damped spring toward the cursor; wrist eases to level + roll, pointing away from the elbow
+  const p = palmBody.translation(), v = palmBody.linvel();
+  bodyX += (THREE.MathUtils.clamp(p.x * 0.6, -0.4, 0.22) - bodyX) * Math.min(1, dt * 2.5);
+  const yaw = Math.atan2(-(p.x - ELBOW_DIR_FROM.x - bodyX), -(p.z - ELBOW_DIR_FROM.z));
+  qYaw.setFromAxisAngle(UP, yaw);
+  const gx = Math.sin(yaw) * GRAB_Z, gz = Math.cos(yaw) * GRAB_Z;
+  // carrying: whatever's in the hand keeps its bottom clear of the cups and jugs on the bench
+  target.y = !lowered ? BENCH + Math.max(0.1, P.hover + S.heightAdj, S.held ? S.hang + 0.125 : 0)
+    : S.held ? surfaceNear(target.x, target.z, 0.06) + S.hang + (P.mode === 'easy' && S.easy === 'placing' ? 0.004 : P.carryLift)
+    : reachHeight();
+  // carry the weight of what you're holding, so a full jug or the milk bottle doesn't sag below the cursor
+  const heldLift = S.held ? 0.85 * 9.81 * S.held.body.mass() / 0.6 : 0;
+  const nv = new V3(
+    v.x + (P.spring * (target.x - gx - p.x) - P.damping * v.x) * dt,
+    v.y + (P.spring * (target.y - p.y) - P.damping * v.y + heldLift) * dt,
+    v.z + (P.spring * (target.z - gz - p.z) - P.damping * v.z) * dt);
+  if (nv.length() > P.maxSpeed) nv.setLength(P.maxSpeed);
+  palmBody.setLinvel(nv, true);
+  qRoll.setFromAxisAngle(Z, S.roll); qTarget.copy(qYaw).multiply(qRoll);
+  const qc = q4(palmBody.rotation()).slerp(qTarget, Math.min(1, dt * P.wristFollow));
+  palmBody.setRotation({ x: qc.x, y: qc.y, z: qc.z, w: qc.w }, true);
+
+  world.step();
+
+  // grab rules: a digit counts only if it closed while something was in reach
+  const pp = v3(palmBody.translation()), inv = q4(palmBody.rotation()).invert();
+  let candidate = null, best = Infinity;
+  for (const g of GRABS) {
+    if (g.name === 'cup' && S.respawnT > 0) continue;
+    const l = gripPoint(g).sub(pp).applyQuaternion(inv);
+    const d = Math.hypot(l.x, l.z - GRAB_Z);
+    if (d < P.grabRadius * (P.mode === 'easy' ? 1.3 : 1) && l.y < 0.002 && l.y > (P.mode === 'easy' ? -0.13 : -0.09) && d < best) { best = d; candidate = g; }
+  }
+  for (let i = 0; i < 5; i++) {
+    if (!S.closed[i] && S.curl[i] > 0.7) { S.closed[i] = true; S.onObj[i] = !!candidate || !!S.held; }
+    else if (S.closed[i] && S.curl[i] < 0.5) { S.closed[i] = false; S.onObj[i] = false; }
+  }
+  const nF = S.onObj.slice(0, 4).filter(Boolean).length, th = S.onObj[4];
+  let g = (th && nF >= 2) ? 'firm' : ((th && nF === 1) || (!th && nF >= 3)) ? 'pinch' : 'none';
+  const obj = S.held || candidate;
+  if (!obj) g = 'none';
+  if (g !== S.grade) setGrip(g, obj);
+  if (S.held && S.grade === 'firm' && Math.abs(pp.distanceTo(v3(S.held.body.translation())) - S.grabDist) > 0.025) { dropGrip(); toast('Slipped!', 0.9); }
+
+  // portafilter: locks back in when held up under the group; resets if it hits the floor
+  if (!S.pfLocked) {
+    const b = v3(pfBody.translation());
+    const offG = Math.hypot(b.x - GH.x, b.z - GH.z), offF = Math.hypot(b.x - FORK_POSE.x, b.z - FORK_POSE.z);
+    const from = S.pfFrom === 'group' ? offG : S.pfFrom === 'fork' ? offF : 1;
+    if (from > 0.07) S.pfArmed = true;   // must leave a dock before it can click back into the same one
+    const heldPf = S.held?.name === 'portafilter';
+    if (heldPf && (S.pfArmed || S.pfFrom !== 'group') && offG < 0.03 && b.y > GROUP_BOTTOM - 0.11) lockPortafilter('Locked in');
+    else if (heldPf && (S.pfArmed || S.pfFrom !== 'fork') && offF < 0.035 && b.y > FORK_POSE.y - 0.06 && b.y < FORK_POSE.y + 0.15) lockPortafilter('In the grinder', 'fork');
+    else if (b.y < BENCH - 0.06) { S.dose = 0; S.tamp = 0; S.puck = false; lockPortafilter('Dropped the portafilter'); }
+    else {
+      // upside down and let go: grounds everywhere, it goes back to the group empty (a cheap failure, like a dropped cup)
+      const upY = UP.clone().applyQuaternion(q4(pfBody.rotation())).y;
+      S.pfFlipT = !heldPf && upY < 0.2 ? (S.pfFlipT || 0) + dt : 0;
+      if (S.pfFlipT > 1.2) { S.pfFlipT = 0; S.dose = 0; S.tamp = 0; S.tampQ = 1; S.puck = false; lockPortafilter('Grounds everywhere<small>start the dose again</small>'); }
+    }
+  }
+  espressoChain(dt);
+  milkChain(dt);
+
+  if (S.respawnT > 0) { S.respawnT -= dt; if (S.respawnT <= 0) placeCup(); return; }
+  const cupHeld = S.held?.name === 'cup';
+
+  const cp = v3(cupBody.translation()), cq = q4(cupBody.rotation());
+  const cupUp = UP.clone().applyQuaternion(cq), top = cp.clone().addScaledVector(cupUp, CUP_H / 2);
+  const cv = v3(cupBody.linvel());
+  const acc = cv.clone().sub(S.prevV).divideScalar(dt);
+  const dv = cv.distanceTo(S.prevV); S.prevV.copy(cv);
+  S.aSm += (Math.hypot(acc.x, acc.z) - S.aSm) * Math.min(1, dt * 10);
+  const tilt = THREE.MathUtils.radToDeg(cupUp.angleTo(UP));
+  S.clinkCd -= dt;
+  if (!cupHeld && dv > 0.3 && S.clinkCd <= 0) { clink(Math.min(1, dv / 1.5)); S.clinkCd = 0.09; }
+
+  // spill: the liquid surface tilts with the cup and with how hard you accelerate it
+  const level = cupLevel();
+  if (level > 0.01) {
+    const eff = tilt + THREE.MathUtils.radToDeg(Math.atan(S.aSm / 9.81)) * P.slosh;
+    const thresh = 10 + (1 - Math.min(1, level)) * 55;
+    if (eff > thresh) {
+      const loss = Math.min(level, (eff - thresh) / 30 * dt * P.spillRate), keep = 1 - loss / level;
+      S.fill *= keep; S.cupMilk *= keep; S.spillAcc += loss * 300;
+      const lipDir = new V3(cupUp.x, 0, cupUp.z);
+      if (lipDir.lengthSq() < 1e-4) lipDir.set(-acc.x, 0, -acc.z);
+      lipDir.normalize();
+      while (S.spillAcc > 1) {
+        S.spillAcc -= 1;
+        spawnDrop(top.clone().addScaledVector(lipDir, CUP_R), cv.clone().addScaledVector(lipDir, 0.25 + Math.random() * 0.2).add(new V3((Math.random() - .5) * .1, 0.05, (Math.random() - .5) * .1)));
+      }
+      if (loss > 0.002 && S.clinkCd <= 0) { noise(0.25, 900, 0.8, 0.05); S.clinkCd = 0.25; }
+    }
+  }
+
+  const resting = !cupHeld && cv.length() < 0.05 && v3(cupBody.angvel()).length() < 0.6;
+  const bottomY = cp.y - CUP_H / 2;
+  const elapsed = S.time - S.roundStart;
+
+  if (cp.y < BENCH - 0.06 || (tilt > 60 && !cupHeld)) {
+    S.failT += dt;
+    if (S.failT > (cp.y < BENCH - 0.06 ? 0.3 : 0.9)) {
+      S.failT = 0; noise(0.4, 2500, 0.5, 0.12, 'highpass'); clink(0.8);
+      for (let i = 0; i < Math.round(cupLevel() * 40); i++) spawnDrop(top, new V3((Math.random() - .5) * .8, Math.random() * .6, (Math.random() - .5) * .8));
+      freshCup(cp.y < BENCH - 0.06 ? 'Smash.' : 'Knocked it.');
+      return;
+    }
+  } else S.failT = 0;
+
+  if (S.phase === 'toMachine') {
+    const inZone = Math.hypot(cp.x - GH.x, cp.z - GH.z) < P.trayTolerance && Math.abs(bottomY - TRAY_TOP) < 0.012 && tilt < 10;
+    S.restT = inZone && resting ? S.restT + dt : 0;
+    const once = S.restT > 0.35 && S.restT - dt <= 0.35;
+    if (S.restT > 0.35 && S.pfAt !== 'group') { if (once) toast('No portafilter in the group', 1.2); }
+    else if (S.restT > 0.35 && S.puck) { if (once) toast('That’s the last puck<small>knock it out and grind fresh</small>', 1.6); }
+    else if (S.restT > 0.35 && S.dose < 0.25) { if (once) toast('Nothing in the basket<small>grind first</small>', 1.4); }
+    else if (S.restT > 0.35) {
+      S.shotQ = shotQuality();
+      M.crema.color.set(S.dose < 0.8 ? 0xc79a62 : S.dose > 1.15 ? 0x5e3518 : 0xa8652f);
+      S.phase = 'filling'; S.shotT = 0; S.t1 = elapsed; S.restT = 0;
+      shotNoise = noise(2.6, 380, 0.7, 0.06);
+      toast(`Under the group · ${S.t1.toFixed(1)}s<small>${S.t1 < 5 ? 'under 5 — clean' : 'goal is under 5s'}</small>`, 1.6);
+    }
+  } else if (S.phase === 'filling') {
+    S.shotT += dt;
+    const flowing = S.pfAt === 'group';
+    const inZone = Math.hypot(cp.x - GH.x, cp.z - GH.z) < P.trayTolerance + 0.01 && tilt < 25;
+    if (flowing && inZone) S.fill = Math.min(1, S.fill + dt / 2.4);
+    stream.visible = flowing;
+    const yTop = PF_LOCK.y - 0.035, yBot = inZone ? bottomY + 0.018 + 0.038 * cupLevel() : TRAY_TOP;
+    stream.position.set(GH.x, (yTop + yBot) / 2, GH.z); stream.scale.y = Math.max(0.001, yTop - yBot);
+    if (S.shotT >= 2.4) {
+      stream.visible = false; S.phase = 'toPass'; S.puck = true;
+      if (S.fill > 0.3) toast('Shot’s in<small>now steam the milk and pour</small>', 1.8);
+      else toast('Most of that went in the tray', 1.6);
+    }
+  } else if (S.phase === 'toPass') {
+    const inZone = Math.hypot(cp.x - PASS.x, cp.z - PASS.z) < 0.08 && Math.abs(bottomY - PASS_TOP) < 0.012 && tilt < 10;
+    S.restT = inZone && resting ? S.restT + dt : 0;
+    if (S.restT > 0.35) {
+      const t2 = elapsed, f = S.fill, lvl = cupLevel(), T = S.cupMilkTemp, F = S.cupFoam;
+      const noMilk = S.cupMilk < 40;
+      const milkQ = noMilk ? 0.35 : S.cupScalded ? 0.25 : T >= 55 && T <= 66 ? 1 : T < 45 ? 0.5 : 0.8;
+      const foamQ = noMilk ? 1 : F >= 0.12 && F <= 0.4 ? 1 : F > 0.4 ? 0.65 : 0.8;
+      const fillQ = Math.min(1, lvl / 0.9);
+      const q = f < 0.3 ? 0.05 : S.shotQ * milkQ * foamQ * fillQ;
+      const note = f < 0.3 ? 'Where’s the coffee?' : noMilk ? 'Dave wanted milk in that.' : S.cupScalded ? 'Scalded milk.' : T < 45 ? 'Lukewarm.' : S.shotQ < 0.75 ? S.shotNote : F > 0.4 ? 'Too foamy. That’s a cappuccino.' : F < 0.12 ? 'Flat milk. Stretch it a bit.' : T > 66 ? 'Hot milk, a bit scorched.' : lvl < 0.8 ? 'Bit short.' : S.shotNote;
+      const verdict = q >= 0.9 ? 'Perfect. Dave nods.' : q >= 0.7 ? `Close. ${note}` : `Dave sips. ${note}`;
+      S.runs.unshift({ t1: S.t1, t2, f, q }); S.runs.length = Math.min(S.runs.length, 6);
+      toast(`${verdict}<small>${t2.toFixed(1)}s · ${Math.round(q * 100)}% score</small>`, 2.6);
+      clink(0.5);
+      S.phase = 'done'; S.resultT = 2.4;
+    }
+  } else if (S.phase === 'done') {
+    S.resultT -= dt;
+    if (S.resultT <= 0) { freshCup(); S.roundStart = S.time; S.t1 = null; }
+  }
+}
+
+// ─── render ───
+function stepsHtml(prepDone) {
+  const st = (done, txt, warn) => `<div class="step ${done ? 'done' : ''} ${warn ? 'warn' : ''}">${done ? '✓' : '▢'} ${txt}</div>`;
+  const g = (S.dose * DOSE_G).toFixed(1);
+  return (S.puck && !prepDone ? st(false, 'knock out the old puck', true) : '')
+    + st(prepDone || (S.dose >= 0.8 && !S.puck), `grind · ${S.puck && !prepDone ? '0.0' : g}g of 18.5`, S.dose > 1.15 && !S.puck)
+    + st(prepDone || (S.tamp >= 1 && !S.puck), 'tamp')
+    + st(prepDone || (S.pfAt === 'group' && S.dose > 0.25 && !S.puck), 'lock it in');
+}
+function milkStepsHtml(served) {
+  const st = (done, txt, warn) => `<div class="step ${done ? 'done' : ''} ${warn ? 'warn' : ''}">${done ? '✓' : '▢'} ${txt}</div>`;
+  const poured = S.cupMilk > 60;
+  return st(served || poured || (S.jug.temp >= 55 && S.jug.ml >= 100 && !S.jug.scalded), `steam milk · ${served || poured ? 'done' : milkWord()}`, S.jug.scalded || S.jug.temp > 66)
+    + st(served || poured, `pour${S.cupMilk > 1 && !served ? ` · ${Math.round(cupLevel() * 100)}% full` : ''}`);
+}
+function renderFrame(dt) {
+  const pp = palmBody.translation(), pq = palmBody.rotation();
+  hand.position.set(pp.x, pp.y, pp.z); hand.quaternion.set(pq.x, pq.y, pq.z, pq.w); hand.updateMatrixWorld(true);
+  const cp = cupBody.translation(), cq = cupBody.rotation();
+  cup.position.set(cp.x, cp.y, cp.z); cup.quaternion.set(cq.x, cq.y, cq.z, cq.w);
+  const fp = pfBody.translation(), fq = pfBody.rotation();
+  pf.position.set(fp.x, fp.y, fp.z); pf.quaternion.set(fq.x, fq.y, fq.z, fq.w);
+  const tp = tamperBody.translation(), tq = tamperBody.rotation();
+  tamper.position.set(tp.x, tp.y, tp.z); tamper.quaternion.set(tq.x, tq.y, tq.z, tq.w);
+  const jp = jugBody.translation(), jq = jugBody.rotation();
+  jug.position.set(jp.x, jp.y, jp.z); jug.quaternion.set(jq.x, jq.y, jq.z, jq.w);
+  jugMilk.visible = S.jug.ml > 5; jugMilk.position.y = jugSurfaceH();
+  M_MILK.color.set(S.jug.scalded ? 0xe9dcc4 : 0xf4f1ea).lerp(new THREE.Color(0xfffdf8), S.jug.foam); M_MILK.roughness = 0.3 + 0.5 * S.jug.foam;
+  const bp = bottleBody.translation(), bq = bottleBody.rotation();
+  bottle.position.set(bp.x, bp.y, bp.z); bottle.quaternion.set(bq.x, bq.y, bq.z, bq.w); bottle.visible = S.bottleGoneT <= 0;
+  // too hot to hold: the hand (and the jug in it) starts to shake
+  if (S.held?.name === 'jug' && S.jug.temp > 62) {
+    const a = Math.min(1, (S.jug.temp - 62) / 8) * 0.004, j = new V3((Math.random() - 0.5) * a * 2, (Math.random() - 0.5) * a, (Math.random() - 0.5) * a * 2);
+    hand.position.add(j); hand.updateMatrixWorld(true); jug.position.add(j);
+  }
+  mound.visible = S.dose > 0.02; mound.material = S.puck ? M_PUCK : M_GROUNDS;
+  mound.scale.set(Math.min(1, 0.55 + S.dose * 0.5), moundScale(), Math.min(1, 0.55 + S.dose * 0.5));
+  updateLiquid(cupLevel());
+  if (S.cupMilk > 15) { liquidTop.material = S.art ? heartMat : M_LATTE; M_LATTE.color.copy(M.crema.color).lerp(new THREE.Color(0xe8d6bd), Math.min(1, S.cupMilk / (S.cupMilk + SHOT_ML * S.fill + 1))); }
+  else liquidTop.material = M.crema;
+
+  poseArm();
+  rigs.forEach((rig, i) => {
+    // holding a cup, fingers hook the rim rather than closing into a fist inside it
+    const c = S.curl[i] * (S.held?.name === 'cup' && i < 4 ? 0.55 : 1), ranges = i === 4 ? CURL.thumb : CURL.finger;
+    rig.forEach((j, k) => { const [o, s] = ranges[k]; j.b.quaternion.copy(j.rest).multiply(_q.setFromAxisAngle(j.ax, o + (s - o) * c)); });
+  });
+
+  stepDrops(dt);
+
+  if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) $toast.style.opacity = 0; }
+  const el = S.time - S.roundStart;
+  const done1 = S.phase !== 'toMachine', done2 = S.phase === 'done';
+  const practice = practiceStart ? Math.floor((performance.now() - practiceStart) / 1000) : 0;
+  $docket.innerHTML = `<h1>Flat white</h1><div class="who">Table 4 · Dave · ceramic</div>
+    ${stepsHtml(done1)}
+    <div class="step ${done1 ? 'done' : ''}">${done1 ? '✓' : '▢'} cup under the group${S.t1 != null ? ` · ${S.t1.toFixed(1)}s` : ''}</div>
+    ${milkStepsHtml(done2)}
+    <div class="step ${done2 ? 'done' : ''}">${done2 ? '✓' : '▢'} to the pass</div>
+    <div class="clock">${S.phase === 'done' ? '' : el.toFixed(1) + 's'}</div>
+    <div class="runs">practice ${Math.floor(practice / 60)}:${String(practice % 60).padStart(2, '0')} · milk ${(S.bottleMl / 1000).toFixed(1)}L left${S.milkWasted > 5 ? ` · ${Math.round(S.milkWasted)}ml wasted` : ''}<br>
+    ${S.runs.map(r => `<b>${r.t2.toFixed(1)}s</b> · ${Math.round((r.q ?? r.f) * 100)}% score`).join('<br>') || 'no orders yet'}</div>`;
+  $fingers.querySelectorAll('.f').forEach(n => {
+    const i = +n.dataset.i;
+    const on = P.mode === 'grip' ? S.grade !== 'none' : S.onObj[i];
+    n.classList.toggle('curl', S.curl[i] > 0.5); n.classList.toggle('on', on && S.curl[i] > 0.5);
+  });
+  $grip.textContent = S.held ? `${S.grade === 'firm' ? 'holding' : 'pinching — wobbly'} the ${S.held.name}` : '';
+}
+
+// ─── tuning panel ───
+const gui = new GUI({ title: 'Hand feel' });
+gui.add(P, 'mode', ['easy', 'fingers', 'grip']).onChange(() => { save(); buildFingerHud(); });
+const fa = gui.addFolder('Arm');
+fa.add(P, 'spring', 20, 400, 1); fa.add(P, 'damping', 2, 50, 0.5); fa.add(P, 'maxSpeed', 0.5, 6, 0.1);
+const fw = gui.addFolder('Wrist');
+fw.add(P, 'wristFollow', 2, 40, 0.5); fw.add(P, 'rollSpeed', 0.5, 6, 0.1);
+const fh = gui.addFolder('Height');
+fh.add(P, 'hover', 0.12, 0.45, 0.005); fh.add(P, 'lowerOffset', 0.06, 0.16, 0.001); fh.add(P, 'carryLift', 0, 0.04, 0.001);
+const ff = gui.addFolder('Fingers');
+ff.add(P, 'curlSpeed', 2, 30, 0.5); ff.add(P, 'grabRadius', 0.01, 0.07, 0.001);
+const fc = gui.addFolder('Coffee');
+fc.add(P, 'spillRate', 0, 4, 0.05); fc.add(P, 'slosh', 0, 3, 0.05); fc.add(P, 'trayTolerance', 0.01, 0.07, 0.001);
+const fr = gui.addFolder('Room');
+fr.add(P, 'bgBlur', 0, 1, 0.01).onChange(applyBg); fr.add(P, 'bgIntensity', 0, 2, 0.01).onChange(applyBg); fr.add(P, 'bgTurn', 0, Math.PI * 2, 0.01).onChange(applyBg);
+gui.onChange(save);
+gui.add({ copy() { navigator.clipboard?.writeText(JSON.stringify(P, null, 2)); toast('Settings copied', 1); } }, 'copy').name('Copy settings');
+gui.add({ reset() { Object.assign(P, DEFAULTS); save(); applyBg(); gui.controllersRecursive().forEach(c => c.updateDisplay()); buildFingerHud(); } }, 'reset').name('Reset defaults');
+[fa, fw, fh, ff, fc, fr].forEach(f => f.close());
+if (innerWidth < 760) gui.close();
+
+// sim(ms) steps the world synchronously, so scripted playtests don't depend on frame rate or tab visibility
+const sim = ms => { for (let i = 0, n = Math.round(ms / 1000 / STEP); i < n; i++) step(STEP); renderFrame(0); renderer.render(scene, camera); };
+window.toy = { getReachObj: () => reachObj?.name, S, P, keys, target, aimScreen: (x, y) => { ndc.set(x, y); hasPointer = true; }, noPointer: () => (hasPointer = false), setLowered: b => (lowered = b), setMouse: b => (mouseHeld = b), setTilt: v => { tilting = v !== null; tiltTarget = v || 0; }, palmBody, cupBody, pfBody, tamperBody, jugBody, bottleBody, WAND_TIP, cupLevel, THREE, sim, FORK_POSE, KNOCK, GRABS, gripPoint, camera, scene, applyBg, rigs, GH, PF_LOCK, PF_GRIP, TRAY_TOP, PASS, fit };
+
+let last = performance.now(), accT = 0;
+renderer.setAnimationLoop(() => {
+  const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now;
+  accT += dt;
+  while (accT >= STEP) { step(STEP); accT -= STEP; }
+  renderFrame(dt);
+  renderer.render(scene, camera);
+});
+toast('Dave wants a flat white<small>cup’s on your right</small>', 2.5);
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+Model Information:
+* title:	coffee tamper
+* source:	https://sketchfab.com/3d-models/coffee-tamper-37b87accc5f14a22929340e078af2ac7
+* author:	clon6767 (https://sketchfab.com/clon6767)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "coffee tamper" (https://sketchfab.com/3d-models/coffee-tamper-37b87accc5f14a22929340e078af2ac7) by clon6767 (https://sketchfab.com/clon6767) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

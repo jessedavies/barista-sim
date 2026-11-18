@@ -1,0 +1,11 @@
+Model Information:
+* title:	Paper Coffee Cup 3D Pack
+* source:	https://sketchfab.com/3d-models/paper-coffee-cup-3d-pack-c659e763dabf48d2ab23ee513d77f0c4
+* author:	Subdivision Productions (https://sketchfab.com/SubdivisionProductions)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Paper Coffee Cup 3D Pack" (https://sketchfab.com/3d-models/paper-coffee-cup-3d-pack-c659e763dabf48d2ab23ee513d77f0c4) by Subdivision Productions (https://sketchfab.com/SubdivisionProductions) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
