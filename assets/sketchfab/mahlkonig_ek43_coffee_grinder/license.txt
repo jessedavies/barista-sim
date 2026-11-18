@@ -1,0 +1,11 @@
+Model Information:
+* title:	Mahlkonig EK43 Coffee Grinder
+* source:	https://sketchfab.com/3d-models/mahlkonig-ek43-coffee-grinder-8f7f2d922130446db8c052127b2010aa
+* author:	Epic Art (https://sketchfab.com/epicart)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Mahlkonig EK43 Coffee Grinder" (https://sketchfab.com/3d-models/mahlkonig-ek43-coffee-grinder-8f7f2d922130446db8c052127b2010aa) by Epic Art (https://sketchfab.com/epicart) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

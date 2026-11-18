@@ -10,8 +10,8 @@
   :root { --paper:#f6f1e7; --ink:#231c16; --muted:#7b6f62; --ok:#3f7d4e; }
   html,body { margin:0; height:100%; background:#1c1511; overflow:hidden; font-family:'IBM Plex Mono', ui-monospace, monospace; }
   canvas { display:block; cursor:crosshair; }
-  #docket { position:fixed; top:18px; left:18px; width:236px; background:var(--paper); color:var(--ink);
-    padding:14px 16px 12px; border-radius:2px; transform:rotate(-1.2deg); box-shadow:0 10px 30px rgba(0,0,0,.45);
+  #docket { position:fixed; top:18px; right:18px; width:236px; background:var(--paper); color:var(--ink);
+    padding:14px 16px 12px; border-radius:2px; transform:rotate(1.2deg); box-shadow:0 10px 30px rgba(0,0,0,.45);
     font-size:12px; line-height:1.55; }
   #docket::before { content:''; position:absolute; top:-6px; left:50%; width:8px; height:8px; margin-left:-4px; border-radius:50%; background:#8c8c8c; box-shadow:0 1px 2px rgba(0,0,0,.5); }
   #docket h1 { font-family:'Fraunces', Georgia, serif; font-weight:600; font-size:20px; margin:0 0 2px; letter-spacing:-.01em; }
@@ -36,13 +36,14 @@
   #cue { position:fixed; pointer-events:none; color:#fff; font-size:12px; background:rgba(20,14,10,.72); padding:4px 8px; border-radius:6px; white-space:nowrap; transform:translate(16px, 14px); opacity:0; transition:opacity .15s; }
   #coach { position:fixed; left:50%; bottom:76px; transform:translateX(-50%); color:#231c16; background:#f6f1e7; font-size:13px; padding:7px 14px; border-radius:999px; box-shadow:0 6px 20px rgba(0,0,0,.35); max-width:80vw; text-align:center; }
   #coach:empty { display:none; }
-  #retry { position:fixed; top:18px; left:270px; font:500 12px 'IBM Plex Mono', monospace; color:#231c16; background:#f6f1e7; border:0; border-radius:6px; padding:8px 10px; cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,.35); }
+  @media (max-width: 1000px) { #coach { bottom:200px; } }
+  #retry { position:fixed; top:18px; right:270px; font:500 12px 'IBM Plex Mono', monospace; color:#231c16; background:#f6f1e7; border:0; border-radius:6px; padding:8px 10px; cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,.35); }
   #retry:hover { background:#fff; }
   #help kbd { font-family:inherit; border:1px solid rgba(246,241,231,.4); border-radius:3px; padding:0 4px; color:#fff; }
   #credits { position:fixed; right:12px; bottom:8px; color:rgba(246,241,231,.45); font-size:10px; }
   #credits a { color:inherit; }
   #loading { position:fixed; inset:0; display:grid; place-items:center; color:#f6f1e7; font-family:'Fraunces',serif; font-size:22px; z-index:5; background:#1c1511; }
-  @media (max-width: 760px) { #help, #credits { display:none; } #docket { transform:none; width:200px; } #retry { left:230px; } }
+  @media (max-width: 760px) { #help, #credits { display:none; } #docket { transform:none; width:200px; } #retry { right:230px; } }
 </style>
 <script type="importmap">
 { "imports": {
@@ -61,7 +62,7 @@
 <div id="cue"></div>
 <div id="coach"></div>
 <button id="retry" title="Restart this order (R)">↺ Restart order · R</button>
-<div id="credits">Models CC-BY: Lanzaman, JoeDev, DavidFischer, clon6767, Subdivision Productions, symbol aughhhh · <a href="../CREDITS.md">credits</a></div>
+<div id="credits">Models CC-BY: Lanzaman, JoeDev, DavidFischer, clon6767, Subdivision Productions, Epic Art, symbol aughhhh · <a href="../CREDITS.md">credits</a></div>
 <script type="module">
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
@@ -106,9 +107,11 @@ const PASS = new V3(-0.32, 0, 0.04);
 const PASS_TOP = BENCH + 0.012;
 const SPAWN = new V3(0.1, 0, -0.01);
 // espresso chain stations (left of the machine)
-const GRINDER = new V3(-0.6, BENCH, -0.52);
-const FORK_POSE = new V3(GRINDER.x, BENCH + 0.2, GRINDER.z + 0.16);   // basket centre when docked under the chute
-const CHUTE_Y = BENCH + 0.225;
+// EK43-style shop grinder (model front faces -x; turned to face the barista). Measured: spout mouth under the head at 33cm,
+// narrow front column below it, so the portafilter rests just in front of the column.
+const GRINDER = new V3(-0.6, BENCH, -0.5);
+const FORK_POSE = new V3(GRINDER.x, BENCH + 0.30, GRINDER.z + 0.075);   // basket centre when docked under the spout
+const CHUTE_Y = BENCH + 0.333;
 const KNOCK = new V3(-0.62, BENCH, -0.2), KNOCK_R = 0.065, KNOCK_H = 0.1;
 const TAMPER_HOME = new V3(-0.48, BENCH, -0.04);
 const DOSE_G = 18.5;   // grams at dose = 1
@@ -156,7 +159,7 @@ scene.add(key);
 // ─── load everything ───
 const texLoader = new THREE.TextureLoader(), gltf = new GLTFLoader();
 const loadTex = (url, srgb) => texLoader.loadAsync(url).then(t => { if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t; });
-const [hdri, oakDiff, oakNor, oakRough, , gMachine, gCup, gArms, gPitcher, gTamper, gPaper] = await Promise.all([
+const [hdri, oakDiff, oakNor, oakRough, , gMachine, gCup, gArms, gPitcher, gTamper, gPaper, gGrinder] = await Promise.all([
   new RGBELoader().loadAsync(ASSETS.hdri),
   loadTex(ASSETS.oak('diff'), true), loadTex(ASSETS.oak('nor_gl')), loadTex(ASSETS.oak('rough')),
   RAPIER.init(),
@@ -166,6 +169,7 @@ const [hdri, oakDiff, oakNor, oakRough, , gMachine, gCup, gArms, gPitcher, gTamp
   gltf.loadAsync(ASSETS.sf('umamusume_milk_frothing_pitcher')),
   gltf.loadAsync(ASSETS.sf('coffee_tamper')),
   gltf.loadAsync(ASSETS.sf('paper_coffee_cup_3d_pack')),
+  gltf.loadAsync(ASSETS.sf('mahlkonig_ek43_coffee_grinder')),
 ]);
 hdri.mapping = THREE.EquirectangularReflectionMapping;
 scene.background = hdri; scene.environment = hdri;
@@ -282,15 +286,24 @@ const LATHE_CUP = [[0, 0], [0.027, 0], [0.030, 0.004], [0.033, 0.02], [0.037, 0.
 for (let i = 0; i < 6; i++) { const c = lathe(LATHE_CUP, M.ceramic); c.rotation.x = Math.PI; c.position.set(-0.3 + i * 0.12, mY(0.528) + 0.08, mZ(0.12 - (i % 2) * 0.13)); scene.add(c); }
 
 // grinder (procedural), knock box, tamper, pitcher, takeaway cups
-const grinder = new THREE.Group(); grinder.position.copy(GRINDER); scene.add(grinder);
-add(new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.42, 0.22, 3, 0.02), M.matte), 0, 0.21, 0, grinder);
-add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.035, 0.03, 24), M.brushed), 0, 0.435, 0, grinder);
-add(lathe([[0.035, 0], [0.07, 0.16], [0.075, 0.17], [0.0, 0.17]], M.glass), 0, 0.45, 0, grinder);
-add(lathe([[0, 0], [0.034, 0], [0.065, 0.12], [0, 0.12]], M.beans), 0, 0.453, 0, grinder);
-add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.07), M.brushed), 0, CHUTE_Y - BENCH + 0.0175, 0.135, grinder);   // chute
-for (const sx of [-1, 1]) grinder.add(rodMesh(new V3(sx * 0.03, 0.18, 0.11), new V3(sx * 0.03, 0.18, 0.2), 0.004, M.brushed));   // fork
-add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.04, 0.04), M.brushed), 0, 0.15, 0.13, grinder).visible = false;
-staticBox(0.08, 0.21, 0.11, GRINDER.x, BENCH + 0.21, GRINDER.z);
+{
+  const g = gGrinder.scene;
+  g.traverse(o => {
+    if (!o.isMesh) return;
+    if (o.material.name === 'material' || o.material.name === 'logo') { o.visible = false; return; }   // studio backdrop; brand logo
+    if (o.material.name === 'plastic_tran') o.material = M.glass;                                       // hopper
+    o.castShadow = o.receiveShadow = true;
+  });
+  g.rotation.y = Math.PI / 2; g.position.copy(GRINDER); scene.add(g);
+  // beans in the hopper (hopper sits over the back of the body)
+  add(lathe([[0, 0], [0.05, 0], [0.09, 0.09], [0, 0.11]], M.beans), GRINDER.x, BENCH + 0.545, GRINDER.z - 0.198);
+  // colliders: body behind the column, the base plate, the head over the spout
+  staticBoxSpan(GRINDER.x - 0.11, GRINDER.x + 0.11, BENCH, BENCH + 0.77, GRINDER.z - 0.313, GRINDER.z + 0.02);
+  staticBoxSpan(GRINDER.x - 0.1, GRINDER.x + 0.1, BENCH, BENCH + 0.03, GRINDER.z + 0.02, GRINDER.z + 0.1);
+  staticBoxSpan(GRINDER.x - 0.08, GRINDER.x + 0.08, BENCH + 0.34, BENCH + 0.47, GRINDER.z + 0.02, GRINDER.z + 0.1);
+  // a small portafilter rest under the spout (an EK43 has none; baristas hold it, we let it sit)
+  for (const sx of [-1, 1]) scene.add(rodMesh(new V3(GRINDER.x + sx * 0.03, FORK_POSE.y - 0.022, GRINDER.z + 0.02), new V3(GRINDER.x + sx * 0.03, FORK_POSE.y - 0.022, FORK_POSE.z + 0.03), 0.004, M.chrome));
+}
 const grindStream = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.01, 1, 10), new THREE.MeshStandardMaterial({ color: 0x4a2c1a, roughness: 1 }));
 grindStream.visible = false; scene.add(grindStream);
 // knock box: open-topped, so a portafilter can be banged down into it
@@ -1316,6 +1329,7 @@ function renderFrame(dt) {
 
 // ─── tuning panel ───
 const gui = new GUI({ title: 'Hand feel' });
+gui.domElement.style.cssText += 'top:auto;bottom:18px;right:18px;';   // the docket owns the top-right; tuning lives bottom-right, closed
 gui.add(P, 'mode', ['easy', 'fingers', 'grip']).onChange(() => { save(); buildFingerHud(); });
 const fa = gui.addFolder('Arm');
 fa.add(P, 'spring', 20, 400, 1); fa.add(P, 'damping', 2, 50, 0.5); fa.add(P, 'maxSpeed', 0.5, 6, 0.1);
@@ -1333,7 +1347,7 @@ gui.onChange(save);
 gui.add({ copy() { navigator.clipboard?.writeText(JSON.stringify(P, null, 2)); toast('Settings copied', 1); } }, 'copy').name('Copy settings');
 gui.add({ reset() { Object.assign(P, DEFAULTS); save(); applyBg(); gui.controllersRecursive().forEach(c => c.updateDisplay()); buildFingerHud(); } }, 'reset').name('Reset defaults');
 [fa, fw, fh, ff, fc, fr].forEach(f => f.close());
-if (innerWidth < 760) gui.close();
+gui.close();
 
 // sim(ms) steps the world synchronously, so scripted playtests don't depend on frame rate or tab visibility
 const sim = ms => { for (let i = 0, n = Math.round(ms / 1000 / STEP); i < n; i++) step(STEP); renderFrame(0); renderer.render(scene, camera); };
