@@ -115,7 +115,7 @@ Dockets carry names. Regulars come back with the same order ("Dave, oat magic, e
 3. **Where is the peak, and is the ending designed?** Both are designed on purpose (see the slice). The end-of-shift summary is the [[peak-end-rule]] ending, and its detail ("Dave's magic was perfect") makes the shift [[storyteller-bias]]-memorable.
 4. **Which engagement mechanics are earned?** Unlocking the menu ([[collection-bias]]), regulars ([[surprise-effect]] in the content, never in the structure), and the [[humor-effect]] with a high budget. Spills and docket names are the jokes. Avoid timers that punish beyond the rush itself, and avoid fail states that wipe progress.
 5. **Is the constraint protected from convenience creep?** The constraint is the clumsy hands. The pressure will be to add auto-snap and assists until it's just Overcooked. Allow assists only as a visible difficulty setting, never quietly.
-6. **Who tried it and left?** Someone who couldn't pick up a cup in their first 30 seconds. The hand toy needs a cold playtest with someone who isn't you (one of the kids?) before the slice starts.
+6. **Who tried it and left?** Someone who couldn't pick up a cup in their first 30 seconds. The hand toy needs a cold playtest with someone who isn't you before the slice starts.
 
 ---
 

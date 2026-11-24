@@ -274,8 +274,11 @@ add(new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.3, 0.02), M.oakFront), 0, BENCH 
     new THREE.Box3(new V3(-0.215, 0.235, 0.12), new V3(-0.085, 0.334, 0.44)),   // portafilter locked in the left group
     new THREE.Box3(new V3(0.06, 0.134, 0.11), new V3(0.38, 0.22, 0.33)),        // portafilter lying on the tray
     new THREE.Box3(new V3(0.30, 0.135, 0.10), new V3(0.43, 0.343, 0.27)),       // right steam wand: replaced by ours
+    new THREE.Box3(new V3(0.17, 0.07, 0.2903), new V3(0.38, 0.12, 0.31)),       // raised brand lettering on the front panel
   ]);
   solidify(m); m.position.copy(M_OFF); scene.add(m);
+  // a blank brushed nameplate where the brand lettering was
+  add(new THREE.Mesh(new RoundedBoxGeometry(0.2, 0.042, 0.003, 2, 0.001), M.brushed), 0.275, mY(0.095), mZ(0.2915));
   staticBoxSpan(-0.47, 0.47, BENCH, TRAY_TOP, mZ(-0.288), MACHINE_FRONT);            // base + drip tray
   staticBoxSpan(-0.47, 0.47, mY(0.344), mY(0.558), mZ(-0.288), MACHINE_FRONT);       // upper body
   staticBoxSpan(-0.47, 0.47, TRAY_TOP, mY(0.344), mZ(-0.288), RECESS_BACK);          // back of the brew recess
